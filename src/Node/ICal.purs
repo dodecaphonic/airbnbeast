@@ -1,4 +1,4 @@
-module Node.ICal (ParseICSError, Status, parseICS, fetchICS) where
+module Node.ICal (Calendar, DateWithTimezone, Event, Settings, ParseICSError, Status(..), parseICS, fetchICS) where
 
 import Prelude
 
@@ -44,6 +44,8 @@ data Status
   | InProcess
   | Draft
   | Final
+
+derive instance Eq Status
 
 type Event =
   { summary :: String
@@ -126,7 +128,7 @@ calendarFromObject obj = withMappedErrors do
 
   parseEvents =
     (FO.toUnfoldable obj :: Array (Tuple String Foreign))
-      # foldMap (\ev -> if Set.member (Tuple.fst ev) nonEventKeys then pure (Tuple.snd ev) else mempty)
+      # foldMap (\ev -> if Set.member (Tuple.fst ev) nonEventKeys then mempty else pure (Tuple.snd ev))
       # traverse parseEvent
 
   parseEvent ev = do
