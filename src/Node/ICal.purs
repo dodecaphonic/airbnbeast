@@ -1,4 +1,4 @@
-module Node.ICal (Calendar, DateWithTimezone, Event, Settings, ParseICSError, Status(..), parseICS, fetchICS) where
+module Node.ICal (Calendar, DateWithTimezone, Event, Settings, ParseICSError(..), Status(..), parseICS, fetchICS) where
 
 import Prelude
 
@@ -14,7 +14,7 @@ import Data.JSDate as JSDate
 import Data.List.NonEmpty (NonEmptyList)
 import Data.List.NonEmpty as NEL
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Set as Set
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple)
@@ -75,6 +75,8 @@ foreign import _parseICS :: Fn1 String RawCalendarObject
 foreign import _fetchICS :: Fn1 String (Promise RawCalendarObject)
 
 newtype ParseICSError = ParseICSError String
+
+derive instance Newtype ParseICSError _
 
 instance Show ParseICSError where
   show (ParseICSError e) = e
