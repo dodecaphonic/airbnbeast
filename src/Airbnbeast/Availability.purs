@@ -17,6 +17,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
 import Effect.Aff (Aff, throwError)
 import Effect.Exception (error)
@@ -64,7 +65,17 @@ airbnbDatesToDailyOccupancy dates = datesAsDailyOccupancy
       (enumFromTo (dwan.dates ^. fromL) (dwan.dates ^. toL) :: Array Date)
 
   mergeDates dwan Nothing = Just [ dwan ]
-  mergeDates dwan (Just existingDates) = Just $ Array.snoc existingDates dwan
+  mergeDates dwan (Just existingDates) =
+    case Array.find (\{ apartmentName } -> apartmentName == dwan.apartmentName) existingDates of
+      Just odwan -> case Tuple dwan.dates odwan.dates of
+        Parser.Reservation _ /\ Parser.Unavailability _ ->
+          Just $ (flip Array.snoc) dwan $ Array.delete odwan existingDates
+
+        _ ->
+          Just existingDates
+
+      Nothing ->
+        Just $ Array.snoc existingDates dwan
 
   asDailyOccuppancy (date /\ airbnbDates) =
     let
