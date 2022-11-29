@@ -1,4 +1,4 @@
-module Airbnbeast.Availability (fetchAvailability, fetchDayToDay) where
+module Airbnbeast.Availability (GuestStay, Apartment(..), fetchAvailability, fetchDayToDay, fetchGuestStays) where
 
 import Prelude
 
@@ -13,6 +13,7 @@ import Data.Foldable (foldl, foldr)
 import Data.Lens ((^.))
 import Data.List.NonEmpty (NonEmptyList(..))
 import Data.List.NonEmpty as NEL
+import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -23,9 +24,23 @@ import Effect.Aff (Aff, throwError)
 import Effect.Exception (error)
 import Node.ICal as ICal
 
+newtype Apartment = Apartment String
+
+derive newtype instance Eq Apartment
+derive newtype instance Ord Apartment
+derive newtype instance Show Apartment
+
 type AirbnbCalendar =
-  { name :: String
+  { apartment :: Apartment
   , icsUrl :: String
+  }
+
+type GuestStay =
+  { last4Digits :: String
+  , apartment :: Apartment
+  , fromDate :: Date
+  , toDate :: Date
+  , link :: String
   }
 
 type DailyOccupancy =
@@ -33,13 +48,13 @@ type DailyOccupancy =
   , occupancy :: Array String
   }
 
-type AirbnbDatesWithApartmentName =
+type AirbnbDatesWithApartment =
   { dates :: AirbnbDates
-  , apartmentName :: String
+  , apartment :: Apartment
   }
 
-fetchAvailability :: AirbnbCalendar -> Aff (Array AirbnbDatesWithApartmentName)
-fetchAvailability { name: apartmentName, icsUrl } = do
+fetchAvailability :: AirbnbCalendar -> Aff (Array AirbnbDatesWithApartment)
+fetchAvailability { apartment, icsUrl } = do
   calendar <- ICal.fetchICS icsUrl
 
   case calendar of
@@ -52,12 +67,35 @@ fetchAvailability { name: apartmentName, icsUrl } = do
           throwError (error errs)
 
         Right events' ->
-          pure $ (\dates -> { dates, apartmentName }) <$> events'
+          pure $ (\dates -> { dates, apartment }) <$> events'
 
-airbnbDatesToDailyOccupancy :: Array AirbnbDatesWithApartmentName -> Array DailyOccupancy
+airbnbDatesToGuestStays :: Array AirbnbDatesWithApartment -> Map Apartment (Array GuestStay)
+airbnbDatesToGuestStays = foldl dateAsGuestStay Map.empty
+  where
+  dateAsGuestStay gss { dates, apartment } = case dates of
+    Parser.Reservation r ->
+      let
+        guestStay =
+          { apartment
+          , fromDate: r.from
+          , toDate: r.to
+          , last4Digits: r.last4Digits
+          , link: r.link
+          }
+      in
+        Map.alter
+          ( case _ of
+              Just ads -> Just $ Array.snoc ads guestStay
+              Nothing -> Just [ guestStay ]
+          )
+          apartment
+          gss
+    Parser.Unavailability _ -> gss
+
+airbnbDatesToDailyOccupancy :: Array AirbnbDatesWithApartment -> Array DailyOccupancy
 airbnbDatesToDailyOccupancy dates = datesAsDailyOccupancy
   where
-  dateMap :: Map.Map Date (Array AirbnbDatesWithApartmentName)
+  dateMap :: Map.Map Date (Array AirbnbDatesWithApartment)
   dateMap = foldl addDates Map.empty dates
 
   addDates map dwan =
@@ -66,7 +104,7 @@ airbnbDatesToDailyOccupancy dates = datesAsDailyOccupancy
 
   mergeDates dwan Nothing = Just [ dwan ]
   mergeDates dwan (Just existingDates) =
-    case Array.find (\{ apartmentName } -> apartmentName == dwan.apartmentName) existingDates of
+    case Array.find (\{ apartment } -> apartment == dwan.apartment) existingDates of
       Just odwan -> case Tuple dwan.dates odwan.dates of
         Parser.Reservation _ /\ Parser.Unavailability _ ->
           Just $ (flip Array.snoc) dwan $ Array.delete odwan existingDates
@@ -80,7 +118,7 @@ airbnbDatesToDailyOccupancy dates = datesAsDailyOccupancy
   asDailyOccuppancy (date /\ airbnbDates) =
     let
       occupancy = airbnbDates
-        <#> \({ dates, apartmentName }) ->
+        <#> \({ dates, apartment: (Apartment apartmentName) }) ->
           case dates of
             Parser.Reservation { last4Digits } ->
               apartmentName <> ": Reserved (" <> last4Digits <> ")"
@@ -95,3 +133,6 @@ airbnbDatesToDailyOccupancy dates = datesAsDailyOccupancy
 
 fetchDayToDay :: Array AirbnbCalendar -> Aff (Array DailyOccupancy)
 fetchDayToDay = traverse fetchAvailability >>> map (foldMap identity) >>> map airbnbDatesToDailyOccupancy
+
+fetchGuestStays :: Array AirbnbCalendar -> Aff (Map Apartment (Array GuestStay))
+fetchGuestStays = traverse fetchAvailability >>> map (foldMap identity) >>> map airbnbDatesToGuestStays

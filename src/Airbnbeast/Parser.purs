@@ -30,18 +30,18 @@ derive instance Eq AirbnbDates
 fromL :: Lens' AirbnbDates Date
 fromL = lens get set
   where
-    get (Reservation { from }) = from
-    get (Unavailability { from }) = from
-    set (Reservation r) from = Reservation (r { from = from })
-    set (Unavailability r) from = Unavailability (r { from = from })
+  get (Reservation { from }) = from
+  get (Unavailability { from }) = from
+  set (Reservation r) from = Reservation (r { from = from })
+  set (Unavailability r) from = Unavailability (r { from = from })
 
 toL :: Lens' AirbnbDates Date
 toL = lens get set
   where
-    get (Reservation { to }) = to
-    get (Unavailability { to }) = to
-    set (Reservation r) to = Reservation (r { to = to })
-    set (Unavailability r) to = Unavailability (r { to = to })
+  get (Reservation { to }) = to
+  get (Unavailability { to }) = to
+  set (Reservation r) to = Reservation (r { to = to })
+  set (Unavailability r) to = Unavailability (r { to = to })
 
 parseEvent :: Event -> Either String AirbnbDates
 parseEvent event = do
