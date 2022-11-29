@@ -7,7 +7,7 @@ import Data.Array as Array
 import Data.Date (Date, Weekday(..))
 import Data.Date as Date
 import Data.DateTime (DateTime(..), Time(..))
-import Data.Enum (succ, toEnum)
+import Data.Enum (enumFromTo, succ, toEnum)
 import Data.Foldable (foldMap)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map)
@@ -111,11 +111,6 @@ scheduleFromGuestStays =
 
     pure $ DateTime refDate time
 
-  datesSpanning :: Date -> Date -> Array Date
-  datesSpanning from to
-    | from == to = [ to ]
-    | otherwise = [ from ] <> (Maybe.fromMaybe [] (datesSpanning <$> succ from <*> pure to))
-
   isWeekend :: Date -> Boolean
   isWeekend d = case Date.weekday d of
     Saturday -> true
@@ -124,7 +119,7 @@ scheduleFromGuestStays =
 
   weekendCoverage startDate endDate =
     let
-      dateSpan = datesSpanning startDate endDate
+      dateSpan = enumFromTo startDate endDate :: Array Date
     in
       if unwrap (foldMap (All <<< isWeekend) dateSpan) then AllWeekend
       else if unwrap (foldMap (Any <<< isWeekend) dateSpan) then PartialWeekend
