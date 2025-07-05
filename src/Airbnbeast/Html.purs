@@ -138,10 +138,22 @@ renderTimeBlockGrid window =
       statusClasses = if available 
         then "bg-green-100 text-green-700 hover:bg-green-200"
         else "bg-red-100 text-red-700 hover:bg-red-200 line-through"
+      dateStr = show (fromEnum $ Date.year date) <> "-" <> 
+                (if fromEnum (Date.month date) < 10 then "0" else "") <> show (fromEnum $ Date.month date) <> "-" <> 
+                (if fromEnum (Date.day date) < 10 then "0" else "") <> show (fromEnum $ Date.day date)
+      apartmentName = case stay.apartment of
+        Apartment name -> case name of
+          "Glória" -> "gloria"
+          "Santa" -> "santa" 
+          _ -> name
     in
       tag "button"
         [ attr "class" (baseClasses <> statusClasses)
         , attr "id" blockId
+        , attr "data-controller" "time-block"
+        , attr "data-time-block-apartment-value" apartmentName
+        , attr "data-time-block-date-value" dateStr
+        , attr "data-time-block-time-of-day-value" (show timeOfDay)
         , attr "data-action" "click->time-block#toggleBlock"
         ]
         timeLabel
@@ -159,9 +171,9 @@ renderTimeBlockGrid window =
 cleaningWindowCard :: CleaningWindow -> HtmlString
 cleaningWindowCard window@(CleaningWindow { from, to, stay }) =
     div [ attr "class" "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
-        , attr "data-controller" "time-block"
-        , attr "data-time-block-adjust-text-value" I18n.pt.adjustPeriods
-        , attr "data-time-block-hide-text-value" I18n.pt.hidePeriods
+        , attr "data-controller" "cleaning-window"
+        , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
+        , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
         ] $
       div [ attr "class" "text-sm text-gray-600 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
         <> div [ attr "class" "text-3xl font-bold text-blue-600 mb-3 text-center font-mono" ] stay.last4Digits
@@ -169,20 +181,20 @@ cleaningWindowCard window@(CleaningWindow { from, to, stay }) =
         <> div [ attr "class" "text-center" ] 
           (tag "button" 
             [ attr "class" "text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full transition-colors"
-            , attr "data-time-block-target" "button"
-            , attr "data-action" "click->time-block#toggle"
+            , attr "data-cleaning-window-target" "button"
+            , attr "data-action" "click->cleaning-window#toggle"
             ] 
             I18n.pt.adjustPeriods
           )
-        <> div [ attr "data-time-block-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-gray-200" ] 
+        <> div [ attr "data-cleaning-window-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-gray-200" ] 
           (renderTimeBlockGrid window)
 
 cleaningWindowCardFirst :: CleaningWindow -> HtmlString
 cleaningWindowCardFirst window@(CleaningWindow { from, to, stay }) =
     div [ attr "class" "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
-        , attr "data-controller" "time-block"
-        , attr "data-time-block-adjust-text-value" I18n.pt.adjustPeriods
-        , attr "data-time-block-hide-text-value" I18n.pt.hidePeriods
+        , attr "data-controller" "cleaning-window"
+        , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
+        , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
         ] $
       div [ attr "class" "text-sm text-blue-700 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
         <> div [ attr "class" "text-3xl font-bold text-blue-800 mb-3 text-center font-mono" ] stay.last4Digits
@@ -190,12 +202,12 @@ cleaningWindowCardFirst window@(CleaningWindow { from, to, stay }) =
         <> div [ attr "class" "text-center" ] 
           (tag "button" 
             [ attr "class" "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
-            , attr "data-time-block-target" "button"
-            , attr "data-action" "click->time-block#toggle"
+            , attr "data-cleaning-window-target" "button"
+            , attr "data-action" "click->cleaning-window#toggle"
             ] 
             I18n.pt.adjustPeriods
           )
-        <> div [ attr "data-time-block-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-blue-300" ] 
+        <> div [ attr "data-cleaning-window-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-blue-300" ] 
           (renderTimeBlockGrid window)
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
