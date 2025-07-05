@@ -128,9 +128,9 @@ renderTimeBlockGrid window =
       div [ attr "class" "flex gap-1" ] (Array.foldMap renderTimeBlock blocks)
   
   renderTimeBlock :: TimeBlock -> HtmlString
-  renderTimeBlock (TimeBlock { date, timeOfDay, available, stay }) =
+  renderTimeBlock (TimeBlock { date, timeOfDay, available, apartment }) =
     let
-      blockId = "block-" <> stay.last4Digits <> "-" <> show date <> "-" <> show timeOfDay
+      blockId = "block-" <> apartmentName <> "-" <> show date <> "-" <> show timeOfDay
       timeLabel = case timeOfDay of
         Morning -> I18n.pt.morning
         Afternoon -> I18n.pt.afternoon
@@ -141,7 +141,7 @@ renderTimeBlockGrid window =
       dateStr = show (fromEnum $ Date.year date) <> "-" <> 
                 (if fromEnum (Date.month date) < 10 then "0" else "") <> show (fromEnum $ Date.month date) <> "-" <> 
                 (if fromEnum (Date.day date) < 10 then "0" else "") <> show (fromEnum $ Date.day date)
-      apartmentName = case stay.apartment of
+      apartmentName = case apartment of
         Apartment name -> case name of
           "Glória" -> "gloria"
           "Santa" -> "santa" 

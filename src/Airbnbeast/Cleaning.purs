@@ -59,7 +59,7 @@ newtype TimeBlock = TimeBlock
   { date :: Date
   , timeOfDay :: TimeOfDay
   , available :: Boolean
-  , stay :: GuestStay
+  , apartment :: Apartment
   }
 
 derive instance Newtype TimeBlock _
@@ -200,11 +200,12 @@ cleaningWindowToTimeBlocks (CleaningWindow { from, to, stay }) =
     startDate = DateTime.date from
     endDate = DateTime.date to
     allDates = enumFromTo startDate endDate
+    apartment = stay.apartment
   in
-    Array.concatMap (dateToTimeBlocks stay) allDates
+    Array.concatMap (dateToTimeBlocks apartment) allDates
   where
-  dateToTimeBlocks :: GuestStay -> Date -> Array TimeBlock
-  dateToTimeBlocks guestStay date =
+  dateToTimeBlocks :: Apartment -> Date -> Array TimeBlock
+  dateToTimeBlocks apt date =
     let
       startDate = DateTime.date from
       endDate = DateTime.date to
@@ -213,14 +214,14 @@ cleaningWindowToTimeBlocks (CleaningWindow { from, to, stay }) =
         { date
         , timeOfDay: Morning
         , available: true -- Default to available, manual overrides will set to false
-        , stay: guestStay
+        , apartment: apt
         }
       
       afternoonBlock = TimeBlock
         { date
         , timeOfDay: Afternoon
         , available: true
-        , stay: guestStay
+        , apartment: apt
         }
     in
       if date == startDate && date == endDate then

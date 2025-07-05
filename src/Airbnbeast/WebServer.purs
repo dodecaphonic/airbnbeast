@@ -23,7 +23,6 @@ import Data.Date (Date)
 import Data.Date as Date
 import Data.Enum (toEnum, fromEnum)
 import Airbnbeast.Cleaning (TimeOfDay(..), TimeBlock(..))
-import Airbnbeast.Availability (GuestStay)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 
@@ -70,20 +69,12 @@ parseTimeOfDay _ = Nothing
 
 createTimeBlock :: Apartment -> Date -> TimeOfDay -> Boolean -> TimeBlock
 createTimeBlock apartment date timeOfDay available =
-  let dummyStay = 
-        { apartment: apartment
-        , fromDate: date
-        , toDate: date
-        , last4Digits: "0000"
-        , link: ""
-        }
-  in
-    TimeBlock
-      { date: date
-      , timeOfDay: timeOfDay
-      , available: available
-      , stay: dummyStay
-      }
+  TimeBlock
+    { date: date
+    , timeOfDay: timeOfDay
+    , available: available
+    , apartment: apartment
+    }
 
 routes :: Storage -> Routes
 routes storage { method: Get, path: [] } = do
