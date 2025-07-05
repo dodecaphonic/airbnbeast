@@ -4,9 +4,9 @@ import Prelude hiding (div)
 
 import Airbnbeast.Availability (Apartment(..))
 import Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..))
+import Airbnbeast.I18n as I18n
 import Data.Array as Array
 import Data.DateTime as DateTime
-import Data.Enum (fromEnum)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Tuple.Nested ((/\))
@@ -67,15 +67,7 @@ span attrs content = tag "span" attrs content
 
 
 formatDate :: DateTime.DateTime -> HtmlString
-formatDate dt =
-  let
-    date = DateTime.date dt
-    year = show $ fromEnum $ DateTime.year date
-    month = show $ fromEnum $ DateTime.month date
-    day = show $ fromEnum $ DateTime.day date
-    weekday = show $ DateTime.weekday date
-  in
-    year <> "-" <> month <> "-" <> day <> " (" <> weekday <> ")"
+formatDate = I18n.formatDatePt
 
 weekendClass :: CleaningWeekend -> String
 weekendClass AllWeekend = "bg-green-50"
@@ -83,9 +75,9 @@ weekendClass PartialWeekend = "bg-yellow-50"
 weekendClass NoWeekend = "bg-gray-50"
 
 weekendText :: CleaningWeekend -> HtmlString
-weekendText AllWeekend = "Full Weekend"
-weekendText PartialWeekend = "Partial Weekend"
-weekendText NoWeekend = "Weekday Only"
+weekendText AllWeekend = I18n.pt.fullWeekend
+weekendText PartialWeekend = I18n.pt.partialWeekend
+weekendText NoWeekend = I18n.pt.weekdayOnly
 
 apartmentToUrl :: Apartment -> String
 apartmentToUrl (Apartment "Glória") = "gloria"
@@ -98,26 +90,26 @@ cleaningWindowRow (CleaningWindow { from, to, weekend, stay }) =
     td [ attr "class" "p-3 border-b border-gray-200" ] (span [ attr "class" "font-medium text-gray-900" ] (formatDate from <> " → " <> formatDate to))
       <> td [ attr "class" "p-3 border-b border-gray-200" ] (span [ attr "class" "font-mono text-lg font-bold text-red-600 bg-gray-50 px-2 py-1 rounded border" ] stay.last4Digits)
       <> td [ attr "class" "p-3 border-b border-gray-200" ] (weekendText weekend)
-      <> td [ attr "class" "p-3 border-b border-gray-200" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 underline" ] "View Reservation")
+      <> td [ attr "class" "p-3 border-b border-gray-200" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 underline" ] I18n.pt.viewReservation)
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
 apartmentSection apartment@(Apartment name) windows =
   div [ attr "class" "bg-white rounded-lg p-6 mb-6 shadow-sm border border-gray-200" ] $
     h2 [ attr "class" "text-2xl font-semibold mb-4 pb-2 border-b-2 border-blue-500" ] 
       (tag "a" [ attr "href" ("/apartment/" <> apartmentToUrl apartment), attr "class" "text-gray-800 hover:text-blue-600 transition-colors no-underline" ] name) <>
-      if Array.null windows then div [ attr "class" "text-center text-gray-500 italic py-10" ] "No cleaning windows scheduled"
+      if Array.null windows then div [ attr "class" "text-center text-gray-500 italic py-10" ] I18n.pt.noCleaningWindows
       else table [ attr "class" "w-full border-collapse" ] $
-        tr [ attr "class" "bg-blue-500 text-white" ] (th [ attr "class" "p-3 text-left font-semibold" ] "Cleaning Window" <> th [ attr "class" "p-3 text-left font-semibold" ] "Keypad Code" <> th [ attr "class" "p-3 text-left font-semibold" ] "Weekend" <> th [ attr "class" "p-3 text-left font-semibold" ] "Reservation") <>
+        tr [ attr "class" "bg-blue-500 text-white" ] (th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.cleaningWindow <> th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.keypadCode <> th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.weekend <> th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.reservation) <>
           Array.foldMap cleaningWindowRow windows
 
 cleaningSchedulePage :: Map Apartment (Array CleaningWindow) -> HtmlString
 cleaningSchedulePage schedule =
   html $
-    head "Cleaning Schedule - Airbnbeast" <>
+    head I18n.pt.pageTitle <>
       body
         ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
-          ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] "🧹 Cleaning Schedule" <>
-              if Map.isEmpty schedule then div [ attr "class" "text-center text-gray-500 italic py-20" ] "No cleaning schedule available"
+          ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] I18n.pt.cleaningSchedule <>
+              if Map.isEmpty schedule then div [ attr "class" "text-center text-gray-500 italic py-20" ] I18n.pt.noCleaningWindows
               else Array.foldMap (\(apartment /\ windows) -> apartmentSection apartment windows)
                 (Map.toUnfoldable schedule :: Array _)
           )
@@ -126,10 +118,10 @@ cleaningSchedulePage schedule =
 apartmentPage :: Apartment -> Array CleaningWindow -> HtmlString
 apartmentPage apartment@(Apartment name) windows =
   html $
-    head ("Cleaning Schedule - " <> name) <>
+    head (I18n.pt.apartmentSchedule name) <>
       body
         ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
-          ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] ("🧹 " <> name <> " Cleaning Schedule") <>
+          ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] (I18n.pt.apartmentSchedule name) <>
               apartmentSection apartment windows
           )
         )
