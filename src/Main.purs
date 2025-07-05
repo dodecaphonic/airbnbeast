@@ -1,10 +1,8 @@
 module Main where
 
-import Prelude
+import Airbnbeast.WebServer as WebServer
+import HTTPure (ServerM)
 
-import Effect (Effect)
-import Effect.Console (log)
+main :: ServerM
+main = WebServer.startServer 8080
 
-main :: Effect Unit
-main = do
-  log "🍝"

@@ -1,4 +1,4 @@
-module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow, scheduleFromGuestStays) where
+module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..), prettyPrintWindow, scheduleFromGuestStays) where
 
 import Prelude
 
@@ -7,7 +7,8 @@ import Data.Array as Array
 import Data.Date (Date, Weekday(..))
 import Data.Date as Date
 import Data.DateTime (DateTime(..), Time(..))
-import Data.Enum (enumFromTo, succ, toEnum)
+import Data.DateTime as DateTime
+import Data.Enum (enumFromTo, fromEnum, toEnum)
 import Data.Foldable (foldMap)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map)
@@ -30,12 +31,18 @@ derive instance Eq CleaningWeekend
 instance Show CleaningWeekend where
   show = genericShow
 
-type CleaningWindow =
+newtype CleaningWindow = CleaningWindow
   { from :: DateTime
   , to :: DateTime
   , weekend :: CleaningWeekend
   , stay :: GuestStay
   }
+
+derive instance Newtype CleaningWindow _
+derive instance Generic CleaningWindow _
+
+instance Show CleaningWindow where
+  show = genericShow
 
 newtype All = All Boolean
 newtype Any = Any Boolean
@@ -55,6 +62,26 @@ instance Semigroup Any where
 instance Monoid Any where
   mempty = Any false
 
+prettyPrintWindow :: CleaningWindow -> String
+prettyPrintWindow (CleaningWindow { from, to, weekend, stay }) =
+  prettyDate from <> " → " <> prettyDate to <> "\n"
+    <> "-----------------------\n"
+    <> "Code: "
+    <> stay.last4Digits
+    <> "\n"
+    <> "Link: "
+    <> stay.link
+    <> "\n"
+    <> "Weekend: "
+    <> show weekend
+
+  where
+  prettyDate :: DateTime -> String
+  prettyDate dt = do
+    let date = DateTime.date dt
+
+    (show $ fromEnum $ DateTime.year date) <> "-" <> (show $ fromEnum $ DateTime.month date) <> "-" <> (show $ fromEnum $ DateTime.day date) <> " (" <> (show $ DateTime.weekday date) <> ")"
+
 scheduleFromGuestStays :: Map Apartment (Array GuestStay) -> Map Apartment (Array CleaningWindow)
 scheduleFromGuestStays =
   (Map.toUnfoldable :: _ -> Array _)
@@ -71,7 +98,7 @@ scheduleFromGuestStays =
 
     (ws /\ Just { head, tail }) -> Maybe.fromMaybe [] do
       previousWindow <- Array.last ws
-      window <- windowBetween head previousWindow.stay.toDate head.fromDate
+      window <- windowBetween head (unwrap previousWindow).stay.toDate head.fromDate
 
       pure $ windowsBetweenStays (Array.snoc ws window) tail
 
@@ -92,7 +119,7 @@ scheduleFromGuestStays =
     let
       weekend = weekendCoverage startDate endDate
 
-    pure
+    pure $ CleaningWindow
       { from: cleaningStart
       , to: cleaningEnd
       , weekend

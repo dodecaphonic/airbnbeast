@@ -1,0 +1,37 @@
+package:
+  dependencies:
+    - aff
+    - aff-promise
+    - arrays
+    - console
+    - datetime
+    - debug
+    - effect
+    - either
+    - enums
+    - exceptions
+    - foldable-traversable
+    - foreign
+    - foreign-object
+    - functions
+    - httpure
+    - identity
+    - js-date
+    - lists
+    - maybe
+    - newtype
+    - node-buffer
+    - node-fs
+    - node-process
+    - ordered-collections
+    - prelude
+    - profunctor-lenses
+    - spec
+    - strings
+    - transformers
+    - tuples
+  name: airbnbeast
+workspace:
+  extraPackages: {}
+  packageSet:
+    url: https://raw.githubusercontent.com/purescript/package-sets/psc-0.15.4-20220921/packages.json

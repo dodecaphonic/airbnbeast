@@ -3,7 +3,7 @@ module Test.Main where
 import Prelude
 
 import Airbnbeast.Availability (Apartment(..))
-import Airbnbeast.Cleaning (CleaningWeekend(..))
+import Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..))
 import Airbnbeast.Cleaning as Cleaning
 import Airbnbeast.Parser (AirbnbDates(..))
 import Airbnbeast.Parser as Airbnbeast
@@ -16,6 +16,7 @@ import Data.Enum (toEnum)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Maybe as Maybe
+import Data.Newtype (unwrap)
 import Data.Traversable (sequence)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
@@ -208,7 +209,7 @@ cleaningSpecs = do
               , weekend: PartialWeekend
               }
 
-          (_.weekend <$> firstWindow) `shouldEqual` Just expectedWindow.weekend
+          (_.weekend <<< unwrap <$> firstWindow) `shouldEqual` Just expectedWindow.weekend
 
       describe "after the first stay" do
         it "creates CleaningWindows considering every stay" do
@@ -229,4 +230,4 @@ cleaningSpecs = do
               ]
 
           (Array.length <$> apartmentSchedule) `shouldEqual` Just (Array.length expectedWindows)
-          ((map (\{ from, to } -> [ from, to ])) <$> apartmentSchedule) `shouldEqual` Just expectedWindows
+          ((map (\(CleaningWindow { from, to }) -> [ from, to ])) <$> apartmentSchedule) `shouldEqual` Just expectedWindows
