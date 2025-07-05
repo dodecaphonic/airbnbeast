@@ -11,6 +11,7 @@ import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff, attempt)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
+import Effect.Now (nowDate)
 import HTTPure (Request, ResponseM, ServerM, header, notFound, ok', serve)
 import HTTPure.Method (Method(..))
 import Node.Encoding (Encoding(..))
@@ -71,8 +72,9 @@ fetchCleaningSchedule = do
       , icsUrl: "https://www.airbnb.com/calendar/ical/568955469596249266.ics?s=878a19388f719853be173bf4ad3dd77c"
       }
 
+  currentDate <- liftEffect nowDate
   guestStays <- fetchGuestStays [ gloria, santa ]
-  pure $ Cleaning.scheduleFromGuestStays guestStays
+  pure $ Cleaning.scheduleFromGuestStaysWithDate currentDate guestStays
 
 startServer :: Int -> ServerM
 startServer port = do

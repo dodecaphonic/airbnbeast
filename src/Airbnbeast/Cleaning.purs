@@ -1,4 +1,4 @@
-module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..), prettyPrintWindow, scheduleFromGuestStays) where
+module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..), prettyPrintWindow, scheduleFromGuestStays, scheduleFromGuestStaysWithDate) where
 
 import Prelude
 
@@ -151,3 +151,19 @@ scheduleFromGuestStays =
       if unwrap (foldMap (All <<< isWeekend) dateSpan) then AllWeekend
       else if unwrap (foldMap (Any <<< isWeekend) dateSpan) then PartialWeekend
       else NoWeekend
+
+scheduleFromGuestStaysWithDate :: Date -> Map Apartment (Array GuestStay) -> Map Apartment (Array CleaningWindow)
+scheduleFromGuestStaysWithDate currentDate guestStays =
+  let
+    allWindows = scheduleFromGuestStays guestStays
+  in
+    map (Array.filter (isValidCleaningWindow currentDate)) allWindows
+
+isValidCleaningWindow :: Date -> CleaningWindow -> Boolean
+isValidCleaningWindow currentDate (CleaningWindow { to }) =
+  let
+    cleaningEndDate = DateTime.date to
+  in
+    -- Only include windows that haven't completely passed
+    -- (cleaning window end date must be today or in the future)
+    cleaningEndDate >= currentDate

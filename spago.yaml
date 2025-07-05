@@ -24,6 +24,7 @@ package:
     - node-fs
     - node-fs-aff
     - node-process
+    - now
     - ordered-collections
     - prelude
     - profunctor-lenses
