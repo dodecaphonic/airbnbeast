@@ -3,13 +3,14 @@ module Airbnbeast.Html where
 import Prelude hiding (div)
 
 import Airbnbeast.Availability (Apartment(..))
-import Airbnbeast.Cleaning (CleaningWindow(..))
+import Airbnbeast.Cleaning (CleaningWindow(..), cleaningWindowToTimeBlocks, timeBlocksToDateRange)
 import Airbnbeast.I18n as I18n
 import Data.Array as Array
 import Data.DateTime as DateTime
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Tuple.Nested ((/\))
 
 type HtmlString = String
@@ -75,6 +76,25 @@ apartmentToUrl (Apartment "Glória") = "gloria"
 apartmentToUrl (Apartment "Santa") = "santa"
 apartmentToUrl (Apartment name) = name -- fallback for any other apartments
 
+-- Process cleaning windows through time block system
+-- For now, this just demonstrates the round-trip conversion
+-- Later we'll add manual override functionality here
+processCleaningWindow :: CleaningWindow -> Maybe CleaningWindow
+processCleaningWindow window@(CleaningWindow { stay }) = 
+  let
+    timeBlocks = cleaningWindowToTimeBlocks window
+    -- TODO: Apply manual overrides here by setting available = false for blocked periods
+  in
+    case timeBlocksToDateRange timeBlocks of
+      Just { from, to } -> 
+        Just $ CleaningWindow
+          { from
+          , to
+          , weekend: (unwrap window).weekend -- Preserve weekend info for now
+          , stay
+          }
+      Nothing -> Nothing
+
 cleaningWindowCard :: CleaningWindow -> HtmlString
 cleaningWindowCard (CleaningWindow { from, to, stay }) =
   div [ attr "class" "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow" ] $
@@ -100,9 +120,14 @@ apartmentSection apartment@(Apartment name) windows =
   where
   renderWindowCards :: Array CleaningWindow -> HtmlString
   renderWindowCards [] = ""
-  renderWindowCards ws = case Array.uncons ws of
-    Just { head: first, tail: rest } -> cleaningWindowCardFirst first <> Array.foldMap cleaningWindowCard rest
-    Nothing -> ""
+  renderWindowCards ws = 
+    let
+      -- Process all windows through time block system
+      processedWindows = Array.mapMaybe processCleaningWindow ws
+    in
+      case Array.uncons processedWindows of
+        Just { head: first, tail: rest } -> cleaningWindowCardFirst first <> Array.foldMap cleaningWindowCard rest
+        Nothing -> ""
 
 cleaningSchedulePage :: Map Apartment (Array CleaningWindow) -> HtmlString
 cleaningSchedulePage schedule =

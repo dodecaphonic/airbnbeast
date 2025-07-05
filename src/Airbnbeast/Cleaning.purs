@@ -1,4 +1,4 @@
-module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..), prettyPrintWindow, scheduleFromGuestStays, scheduleFromGuestStaysWithDate) where
+module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..), TimeOfDay(..), TimeBlock(..), prettyPrintWindow, scheduleFromGuestStays, scheduleFromGuestStaysWithDate, cleaningWindowToTimeBlocks, timeBlocksToDateRange) where
 
 import Prelude
 
@@ -42,6 +42,31 @@ derive instance Newtype CleaningWindow _
 derive instance Generic CleaningWindow _
 
 instance Show CleaningWindow where
+  show = genericShow
+
+data TimeOfDay
+  = Morning
+  | Afternoon
+
+derive instance Generic TimeOfDay _
+derive instance Eq TimeOfDay
+derive instance Ord TimeOfDay
+
+instance Show TimeOfDay where
+  show = genericShow
+
+newtype TimeBlock = TimeBlock
+  { date :: Date
+  , timeOfDay :: TimeOfDay
+  , available :: Boolean
+  , stay :: GuestStay
+  }
+
+derive instance Newtype TimeBlock _
+derive instance Generic TimeBlock _
+derive instance Eq TimeBlock
+
+instance Show TimeBlock where
   show = genericShow
 
 newtype All = All Boolean
@@ -167,3 +192,85 @@ isValidCleaningWindow currentDate (CleaningWindow { to }) =
     -- Only include windows that haven't completely passed
     -- (cleaning window end date must be today or in the future)
     cleaningEndDate >= currentDate
+
+-- Convert a CleaningWindow to a series of TimeBlocks
+cleaningWindowToTimeBlocks :: CleaningWindow -> Array TimeBlock
+cleaningWindowToTimeBlocks (CleaningWindow { from, to, stay }) =
+  let
+    startDate = DateTime.date from
+    endDate = DateTime.date to
+    allDates = enumFromTo startDate endDate
+  in
+    Array.concatMap (dateToTimeBlocks stay) allDates
+  where
+  dateToTimeBlocks :: GuestStay -> Date -> Array TimeBlock
+  dateToTimeBlocks guestStay date =
+    let
+      startDate = DateTime.date from
+      endDate = DateTime.date to
+      
+      morningBlock = TimeBlock
+        { date
+        , timeOfDay: Morning
+        , available: true -- Default to available, manual overrides will set to false
+        , stay: guestStay
+        }
+      
+      afternoonBlock = TimeBlock
+        { date
+        , timeOfDay: Afternoon
+        , available: true
+        , stay: guestStay
+        }
+    in
+      if date == startDate && date == endDate then
+        -- Single day window: include both morning and afternoon if within time range
+        [morningBlock, afternoonBlock]
+      else if date == startDate then
+        -- First day: start from afternoon (13:00)
+        [afternoonBlock]
+      else if date == endDate then
+        -- Last day: only morning (until 13:00)
+        [morningBlock]
+      else
+        -- Middle days: both morning and afternoon
+        [morningBlock, afternoonBlock]
+
+-- Convert consecutive available TimeBlocks back to a readable date range
+timeBlocksToDateRange :: Array TimeBlock -> Maybe { from :: DateTime, to :: DateTime }
+timeBlocksToDateRange blocks =
+  let
+    availableBlocks = Array.filter (\(TimeBlock { available }) -> available) blocks
+    sortedBlocks = Array.sortBy compareTimeBlocks availableBlocks
+  in
+    case Array.uncons sortedBlocks of
+      Just { head: TimeBlock firstBlock } ->
+        case Array.last sortedBlocks of
+          Just (TimeBlock lastBlock) ->
+            let
+              startTime = case firstBlock.timeOfDay of
+                Morning -> createTime 8 0 0 0 -- 8:00 AM
+                Afternoon -> createTime 13 0 0 0 -- 1:00 PM
+              
+              endTime = case lastBlock.timeOfDay of
+                Morning -> createTime 13 0 0 0 -- 1:00 PM
+                Afternoon -> createTime 18 0 0 0 -- 6:00 PM
+            in
+              case startTime /\ endTime of
+                Just st /\ Just et ->
+                  Just
+                    { from: DateTime firstBlock.date st
+                    , to: DateTime lastBlock.date et
+                    }
+                _ -> Nothing
+          Nothing -> Nothing
+      Nothing -> Nothing
+  where
+  compareTimeBlocks :: TimeBlock -> TimeBlock -> Ordering
+  compareTimeBlocks (TimeBlock a) (TimeBlock b) =
+    case compare a.date b.date of
+      EQ -> compare a.timeOfDay b.timeOfDay
+      other -> other
+  
+  createTime :: Int -> Int -> Int -> Int -> Maybe Time
+  createTime h m s ms = Time <$> toEnum h <*> toEnum m <*> toEnum s <*> toEnum ms
