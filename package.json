@@ -9,16 +9,20 @@
   "scripts": {
     "build-css": "tailwindcss -i ./src/styles/input.css -o ./dist/tailwind.css --watch",
     "build-css-prod": "tailwindcss -i ./src/styles/input.css -o ./dist/tailwind.css --minify",
-    "dev": "npm run build-css & spago run",
-    "build": "npm run build-css-prod && spago build",
+    "build-js": "esbuild src/js/application.js --bundle --outfile=dist/application.js --watch",
+    "build-js-prod": "esbuild src/js/application.js --bundle --outfile=dist/application.js --minify",
+    "dev": "npm run build-css & npm run build-js & spago run",
+    "build": "npm run build-css-prod && npm run build-js-prod && spago build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hotwired/stimulus": "^3.2.2",
     "node-ical": "^0.15.1"
   },
   "devDependencies": {
+    "esbuild": "^0.25.5",
     "tailwindcss": "^3.4.0"
   }
 }

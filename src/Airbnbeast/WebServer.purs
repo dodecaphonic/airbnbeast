@@ -52,6 +52,15 @@ routes { method: Get, path: [ "tailwind.css" ] } = do
     Left _ ->
       notFound
 
+routes { method: Get, path: [ "application.js" ] } = do
+  liftEffect $ log "Serving JavaScript application"
+  result <- attempt $ readTextFile UTF8 "./dist/application.js"
+  case result of
+    Right js ->
+      ok' (header "Content-Type" "application/javascript") js
+    Left _ ->
+      notFound
+
 routes _ = do
   liftEffect $ log "404 - Page not found"
   notFound

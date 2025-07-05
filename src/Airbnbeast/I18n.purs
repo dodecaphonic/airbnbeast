@@ -22,6 +22,11 @@ type Translations =
   , partialWeekend :: String
   , weekdayOnly :: String
   , weekdays :: Array String
+  , adjustPeriods :: String
+  , hidePeriods :: String
+  , clickToToggle :: String
+  , morning :: String
+  , afternoon :: String
   }
 
 pt :: Translations
@@ -41,6 +46,11 @@ pt =
   , weekdays:
     [ "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"
     ]
+  , adjustPeriods: "⚙️ Ajustar Períodos"
+  , hidePeriods: "⚙️ Ocultar Períodos"
+  , clickToToggle: "Clique para bloquear/desbloquear períodos:"
+  , morning: "Manhã"
+  , afternoon: "Tarde"
   }
 
 formatDatePt :: DateTime -> String

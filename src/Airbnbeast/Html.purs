@@ -3,10 +3,13 @@ module Airbnbeast.Html where
 import Prelude hiding (div)
 
 import Airbnbeast.Availability (Apartment(..))
-import Airbnbeast.Cleaning (CleaningWindow(..), cleaningWindowToTimeBlocks, timeBlocksToDateRange)
+import Airbnbeast.Cleaning (CleaningWindow(..), TimeOfDay(..), TimeBlock(..), cleaningWindowToTimeBlocks, timeBlocksToDateRange)
 import Airbnbeast.I18n as I18n
 import Data.Array as Array
+import Data.Array.NonEmpty as NEArray
 import Data.DateTime as DateTime
+import Data.Date as Date
+import Data.Enum (fromEnum)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
@@ -39,6 +42,7 @@ head title = tag "head" [] $
     <> tag "meta" [ attr "name" "viewport", attr "content" "width=device-width, initial-scale=1" ] ""
     <> tag "title" [] title
     <> tag "link" [ attr "rel" "stylesheet", attr "href" "/tailwind.css" ] ""
+    <> tag "script" [ attr "src" "/application.js" ] ""
 
 body :: HtmlString -> HtmlString
 body content = tag "body" [ attr "class" "bg-gray-50 min-h-screen" ] content
@@ -95,19 +99,104 @@ processCleaningWindow window@(CleaningWindow { stay }) =
           }
       Nothing -> Nothing
 
+-- Render the time block grid for a cleaning window
+renderTimeBlockGrid :: CleaningWindow -> HtmlString
+renderTimeBlockGrid window =
+  let
+    timeBlocks = cleaningWindowToTimeBlocks window
+    groupedByDate = groupBlocksByDate timeBlocks
+  in
+    div [ attr "class" "space-y-2" ] $
+      div [ attr "class" "text-xs text-gray-600 mb-2 text-center" ] I18n.pt.clickToToggle <>
+      Array.foldMap renderDateBlocks groupedByDate
+  where
+  groupBlocksByDate :: Array TimeBlock -> Array { date :: Date.Date, blocks :: Array TimeBlock }
+  groupBlocksByDate blocks =
+    let
+      grouped = Array.groupBy (\(TimeBlock a) (TimeBlock b) -> a.date == b.date) 
+                  (Array.sortBy (\(TimeBlock a) (TimeBlock b) -> compare a.date b.date) blocks)
+    in
+      Array.mapMaybe (\group -> 
+        case NEArray.head group of
+          TimeBlock { date } -> Just { date, blocks: NEArray.toArray group }
+      ) grouped
+  
+  renderDateBlocks :: { date :: Date.Date, blocks :: Array TimeBlock } -> HtmlString
+  renderDateBlocks { date, blocks } =
+    div [ attr "class" "flex items-center justify-between py-1" ] $
+      div [ attr "class" "text-xs font-medium text-gray-700 w-20" ] (formatDateOnly date) <>
+      div [ attr "class" "flex gap-1" ] (Array.foldMap renderTimeBlock blocks)
+  
+  renderTimeBlock :: TimeBlock -> HtmlString
+  renderTimeBlock (TimeBlock { date, timeOfDay, available, stay }) =
+    let
+      blockId = "block-" <> stay.last4Digits <> "-" <> show date <> "-" <> show timeOfDay
+      timeLabel = case timeOfDay of
+        Morning -> I18n.pt.morning
+        Afternoon -> I18n.pt.afternoon
+      baseClasses = "text-xs px-2 py-1 rounded cursor-pointer transition-colors "
+      statusClasses = if available 
+        then "bg-green-100 text-green-700 hover:bg-green-200"
+        else "bg-red-100 text-red-700 hover:bg-red-200 line-through"
+    in
+      tag "button"
+        [ attr "class" (baseClasses <> statusClasses)
+        , attr "id" blockId
+        , attr "data-action" "click->time-block#toggleBlock"
+        ]
+        timeLabel
+  
+  formatDateOnly :: Date.Date -> String
+  formatDateOnly date =
+    let
+      day = fromEnum $ Date.day date
+      month = fromEnum $ Date.month date
+      dayStr = if day < 10 then "0" <> show day else show day
+      monthStr = if month < 10 then "0" <> show month else show month
+    in
+      dayStr <> "/" <> monthStr
+
 cleaningWindowCard :: CleaningWindow -> HtmlString
-cleaningWindowCard (CleaningWindow { from, to, stay }) =
-  div [ attr "class" "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow" ] $
-    div [ attr "class" "text-sm text-gray-600 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
-      <> div [ attr "class" "text-3xl font-bold text-blue-600 mb-3 text-center font-mono" ] stay.last4Digits
-      <> div [ attr "class" "text-center" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 text-sm" ] I18n.pt.viewReservation)
+cleaningWindowCard window@(CleaningWindow { from, to, stay }) =
+    div [ attr "class" "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
+        , attr "data-controller" "time-block"
+        , attr "data-time-block-adjust-text-value" I18n.pt.adjustPeriods
+        , attr "data-time-block-hide-text-value" I18n.pt.hidePeriods
+        ] $
+      div [ attr "class" "text-sm text-gray-600 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
+        <> div [ attr "class" "text-3xl font-bold text-blue-600 mb-3 text-center font-mono" ] stay.last4Digits
+        <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 text-sm" ] I18n.pt.viewReservation)
+        <> div [ attr "class" "text-center" ] 
+          (tag "button" 
+            [ attr "class" "text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full transition-colors"
+            , attr "data-time-block-target" "button"
+            , attr "data-action" "click->time-block#toggle"
+            ] 
+            I18n.pt.adjustPeriods
+          )
+        <> div [ attr "data-time-block-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-gray-200" ] 
+          (renderTimeBlockGrid window)
 
 cleaningWindowCardFirst :: CleaningWindow -> HtmlString
-cleaningWindowCardFirst (CleaningWindow { from, to, stay }) =
-  div [ attr "class" "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow" ] $
-    div [ attr "class" "text-sm text-blue-700 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
-      <> div [ attr "class" "text-3xl font-bold text-blue-800 mb-3 text-center font-mono" ] stay.last4Digits
-      <> div [ attr "class" "text-center" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-700 hover:text-blue-900 text-sm" ] I18n.pt.viewReservation)
+cleaningWindowCardFirst window@(CleaningWindow { from, to, stay }) =
+    div [ attr "class" "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
+        , attr "data-controller" "time-block"
+        , attr "data-time-block-adjust-text-value" I18n.pt.adjustPeriods
+        , attr "data-time-block-hide-text-value" I18n.pt.hidePeriods
+        ] $
+      div [ attr "class" "text-sm text-blue-700 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
+        <> div [ attr "class" "text-3xl font-bold text-blue-800 mb-3 text-center font-mono" ] stay.last4Digits
+        <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-700 hover:text-blue-900 text-sm" ] I18n.pt.viewReservation)
+        <> div [ attr "class" "text-center" ] 
+          (tag "button" 
+            [ attr "class" "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
+            , attr "data-time-block-target" "button"
+            , attr "data-action" "click->time-block#toggle"
+            ] 
+            I18n.pt.adjustPeriods
+          )
+        <> div [ attr "data-time-block-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-blue-300" ] 
+          (renderTimeBlockGrid window)
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
 apartmentSection apartment@(Apartment name) windows =
