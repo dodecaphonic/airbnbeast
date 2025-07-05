@@ -3,12 +3,13 @@ module Airbnbeast.Html where
 import Prelude hiding (div)
 
 import Airbnbeast.Availability (Apartment(..))
-import Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..))
+import Airbnbeast.Cleaning (CleaningWindow(..))
 import Airbnbeast.I18n as I18n
 import Data.Array as Array
 import Data.DateTime as DateTime
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Maybe (Maybe(..))
 import Data.Tuple.Nested ((/\))
 
 type HtmlString = String
@@ -69,38 +70,39 @@ span attrs content = tag "span" attrs content
 formatDate :: DateTime.DateTime -> HtmlString
 formatDate = I18n.formatDatePt
 
-weekendClass :: CleaningWeekend -> String
-weekendClass AllWeekend = "bg-green-50"
-weekendClass PartialWeekend = "bg-yellow-50"
-weekendClass NoWeekend = "bg-gray-50"
-
-weekendText :: CleaningWeekend -> HtmlString
-weekendText AllWeekend = I18n.pt.fullWeekend
-weekendText PartialWeekend = I18n.pt.partialWeekend
-weekendText NoWeekend = I18n.pt.weekdayOnly
-
 apartmentToUrl :: Apartment -> String
 apartmentToUrl (Apartment "Glória") = "gloria"
 apartmentToUrl (Apartment "Santa") = "santa"
 apartmentToUrl (Apartment name) = name -- fallback for any other apartments
 
-cleaningWindowRow :: CleaningWindow -> HtmlString
-cleaningWindowRow (CleaningWindow { from, to, weekend, stay }) =
-  tr [ attr "class" (weekendClass weekend) ] $
-    td [ attr "class" "p-3 border-b border-gray-200" ] (span [ attr "class" "font-medium text-gray-900" ] (formatDate from <> " → " <> formatDate to))
-      <> td [ attr "class" "p-3 border-b border-gray-200" ] (span [ attr "class" "font-mono text-lg font-bold text-red-600 bg-gray-50 px-2 py-1 rounded border" ] stay.last4Digits)
-      <> td [ attr "class" "p-3 border-b border-gray-200" ] (weekendText weekend)
-      <> td [ attr "class" "p-3 border-b border-gray-200" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 underline" ] I18n.pt.viewReservation)
+cleaningWindowCard :: CleaningWindow -> HtmlString
+cleaningWindowCard (CleaningWindow { from, to, stay }) =
+  div [ attr "class" "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow" ] $
+    div [ attr "class" "text-sm text-gray-600 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
+      <> div [ attr "class" "text-3xl font-bold text-blue-600 mb-3 text-center font-mono" ] stay.last4Digits
+      <> div [ attr "class" "text-center" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 text-sm" ] I18n.pt.viewReservation)
+
+cleaningWindowCardFirst :: CleaningWindow -> HtmlString
+cleaningWindowCardFirst (CleaningWindow { from, to, stay }) =
+  div [ attr "class" "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow" ] $
+    div [ attr "class" "text-sm text-blue-700 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
+      <> div [ attr "class" "text-3xl font-bold text-blue-800 mb-3 text-center font-mono" ] stay.last4Digits
+      <> div [ attr "class" "text-center" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-700 hover:text-blue-900 text-sm" ] I18n.pt.viewReservation)
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
 apartmentSection apartment@(Apartment name) windows =
-  div [ attr "class" "bg-white rounded-lg p-6 mb-6 shadow-sm border border-gray-200" ] $
+  div [ attr "class" "mb-8" ] $
     h2 [ attr "class" "text-2xl font-semibold mb-4 pb-2 border-b-2 border-blue-500" ] 
       (tag "a" [ attr "href" ("/apartment/" <> apartmentToUrl apartment), attr "class" "text-gray-800 hover:text-blue-600 transition-colors no-underline" ] name) <>
       if Array.null windows then div [ attr "class" "text-center text-gray-500 italic py-10" ] I18n.pt.noCleaningWindows
-      else table [ attr "class" "w-full border-collapse" ] $
-        tr [ attr "class" "bg-blue-500 text-white" ] (th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.cleaningWindow <> th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.keypadCode <> th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.weekend <> th [ attr "class" "p-3 text-left font-semibold" ] I18n.pt.reservation) <>
-          Array.foldMap cleaningWindowRow windows
+      else div [ attr "class" "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" ] $
+        renderWindowCards windows
+  where
+  renderWindowCards :: Array CleaningWindow -> HtmlString
+  renderWindowCards [] = ""
+  renderWindowCards ws = case Array.uncons ws of
+    Just { head: first, tail: rest } -> cleaningWindowCardFirst first <> Array.foldMap cleaningWindowCard rest
+    Nothing -> ""
 
 cleaningSchedulePage :: Map Apartment (Array CleaningWindow) -> HtmlString
 cleaningSchedulePage schedule =

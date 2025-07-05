@@ -66,4 +66,4 @@ formatDatePt dt =
       Just name -> name
       Nothing -> show weekdayIndex
   in
-    dayStr <> "/" <> monthStr <> "/" <> show year <> " (" <> weekdayName <> ")"
+    "<span class=\"font-semibold\">" <> dayStr <> "/" <> monthStr <> "/" <> show year <> "</span> <span class=\"font-normal\">(" <> weekdayName <> ")</span>"
