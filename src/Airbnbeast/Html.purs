@@ -87,6 +87,11 @@ weekendText AllWeekend = "Full Weekend"
 weekendText PartialWeekend = "Partial Weekend"
 weekendText NoWeekend = "Weekday Only"
 
+apartmentToUrl :: Apartment -> String
+apartmentToUrl (Apartment "Glória") = "gloria"
+apartmentToUrl (Apartment "Santa") = "santa"
+apartmentToUrl (Apartment name) = name -- fallback for any other apartments
+
 cleaningWindowRow :: CleaningWindow -> HtmlString
 cleaningWindowRow (CleaningWindow { from, to, weekend, stay }) =
   tr [ attr "class" (weekendClass weekend) ] $
@@ -96,9 +101,10 @@ cleaningWindowRow (CleaningWindow { from, to, weekend, stay }) =
       <> td [ attr "class" "p-3 border-b border-gray-200" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 underline" ] "View Reservation")
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
-apartmentSection (Apartment name) windows =
+apartmentSection apartment@(Apartment name) windows =
   div [ attr "class" "bg-white rounded-lg p-6 mb-6 shadow-sm border border-gray-200" ] $
-    h2 [ attr "class" "text-2xl font-semibold text-gray-800 mb-4 pb-2 border-b-2 border-blue-500" ] name <>
+    h2 [ attr "class" "text-2xl font-semibold mb-4 pb-2 border-b-2 border-blue-500" ] 
+      (tag "a" [ attr "href" ("/apartment/" <> apartmentToUrl apartment), attr "class" "text-gray-800 hover:text-blue-600 transition-colors no-underline" ] name) <>
       if Array.null windows then div [ attr "class" "text-center text-gray-500 italic py-10" ] "No cleaning windows scheduled"
       else table [ attr "class" "w-full border-collapse" ] $
         tr [ attr "class" "bg-blue-500 text-white" ] (th [ attr "class" "p-3 text-left font-semibold" ] "Cleaning Window" <> th [ attr "class" "p-3 text-left font-semibold" ] "Keypad Code" <> th [ attr "class" "p-3 text-left font-semibold" ] "Weekend" <> th [ attr "class" "p-3 text-left font-semibold" ] "Reservation") <>

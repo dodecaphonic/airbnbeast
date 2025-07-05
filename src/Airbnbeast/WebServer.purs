@@ -26,10 +26,6 @@ normalizeApartmentName _ = Nothing
 
 routes :: Routes
 routes { method: Get, path: [] } = do
-  liftEffect $ log "Serving index page"
-  ok' (header "Content-Type" "text/html") Html.indexPage
-
-routes { method: Get, path: [ "schedule" ] } = do
   liftEffect $ log "Serving full cleaning schedule"
   schedule <- fetchCleaningSchedule
   ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage schedule)
@@ -80,8 +76,7 @@ startServer :: Int -> ServerM
 startServer port = do
   log $ "🚀 Airbnbeast web server starting on port " <> show port
   log "📋 Available routes:"
-  log "  / - Home page"
-  log "  /schedule - Full cleaning schedule"
+  log "  / - Full cleaning schedule"
   log "  /apartment/:name - Apartment-specific schedule"
   log ""
   serve port routes do
