@@ -29,6 +29,7 @@
             "node-fs",
             "node-fs-aff",
             "node-process",
+            "node-sqlite3",
             "now",
             "ordered-collections",
             "prelude",
@@ -85,6 +86,7 @@
             "node-net",
             "node-path",
             "node-process",
+            "node-sqlite3",
             "node-streams",
             "node-url",
             "nonempty",
@@ -5805,6 +5807,15 @@
         "posix-types",
         "prelude",
         "unsafe-coerce"
+      ]
+    },
+    "node-sqlite3": {
+      "type": "git",
+      "url": "https://github.com/justinwoo/purescript-node-sqlite3.git",
+      "rev": "dedffd06571511314f0a3890c7377abebd5bacae",
+      "dependencies": [
+        "aff",
+        "foreign"
       ]
     },
     "node-streams": {

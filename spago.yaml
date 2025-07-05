@@ -24,6 +24,7 @@ package:
     - node-fs
     - node-fs-aff
     - node-process
+    - node-sqlite3
     - now
     - ordered-collections
     - prelude
