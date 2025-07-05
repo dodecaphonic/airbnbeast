@@ -27,6 +27,7 @@
             "newtype",
             "node-buffer",
             "node-fs",
+            "node-fs-aff",
             "node-process",
             "ordered-collections",
             "prelude",
@@ -78,6 +79,7 @@
             "newtype",
             "node-buffer",
             "node-fs",
+            "node-fs-aff",
             "node-http",
             "node-net",
             "node-path",
@@ -5730,6 +5732,17 @@
         "prelude",
         "strings",
         "unsafe-coerce"
+      ]
+    },
+    "node-fs-aff": {
+      "type": "git",
+      "url": "https://github.com/purescript-node/purescript-node-fs-aff.git",
+      "rev": "ac9b6fd272eb52c906b490be1c714423dd36a5bf",
+      "dependencies": [
+        "aff",
+        "either",
+        "node-fs",
+        "node-path"
       ]
     },
     "node-http": {

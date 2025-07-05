@@ -5,13 +5,16 @@ import Prelude
 import Airbnbeast.Availability (Apartment(..), fetchGuestStays)
 import Airbnbeast.Cleaning as Cleaning
 import Airbnbeast.Html as Html
+import Data.Either (Either(..))
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, attempt)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HTTPure (Request, ResponseM, ServerM, header, notFound, ok', serve)
 import HTTPure.Method (Method(..))
+import Node.Encoding (Encoding(..))
+import Node.FS.Aff (readTextFile)
 
 type Routes = Request -> ResponseM
 
@@ -41,6 +44,15 @@ routes { method: Get, path: [ "apartment", apartmentName ] } = do
         Nothing ->
           notFound
     Nothing ->
+      notFound
+
+routes { method: Get, path: [ "tailwind.css" ] } = do
+  liftEffect $ log "Serving Tailwind CSS"
+  result <- attempt $ readTextFile UTF8 "./dist/tailwind.css"
+  case result of
+    Right css ->
+      ok' (header "Content-Type" "text/css") css
+    Left _ ->
       notFound
 
 routes _ = do

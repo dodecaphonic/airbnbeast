@@ -7,11 +7,18 @@
     "test": "test"
   },
   "scripts": {
+    "build-css": "tailwindcss -i ./src/styles/input.css -o ./dist/tailwind.css --watch",
+    "build-css-prod": "tailwindcss -i ./src/styles/input.css -o ./dist/tailwind.css --minify",
+    "dev": "npm run build-css & spago run",
+    "build": "npm run build-css-prod && spago build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "node-ical": "^0.15.1"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
   }
 }
