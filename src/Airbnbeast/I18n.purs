@@ -21,7 +21,6 @@ type Translations =
   , fullWeekend :: String
   , partialWeekend :: String
   , weekdayOnly :: String
-  , months :: Array String
   , weekdays :: Array String
   }
 
@@ -39,12 +38,8 @@ pt =
   , fullWeekend: "Fim de Semana Completo"
   , partialWeekend: "Fim de Semana Parcial"
   , weekdayOnly: "Apenas Dias Úteis"
-  , months: 
-    [ "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"
-    , "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-    ]
   , weekdays:
-    [ "Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"
+    [ "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"
     ]
   }
 
@@ -53,7 +48,7 @@ formatDatePt dt =
   let
     date = DateTime.date dt
     day = fromEnum $ DateTime.day date
-    monthIndex = (fromEnum $ DateTime.month date) - 1
+    month = fromEnum $ DateTime.month date
     year = fromEnum $ DateTime.year date
     weekdayIndex = case DateTime.weekday date of
       Sunday -> 0
@@ -64,12 +59,11 @@ formatDatePt dt =
       Friday -> 5
       Saturday -> 6
     
-    monthName = case Array.index pt.months monthIndex of
-      Just name -> name
-      Nothing -> show (monthIndex + 1)
+    dayStr = if day < 10 then "0" <> show day else show day
+    monthStr = if month < 10 then "0" <> show month else show month
     
     weekdayName = case Array.index pt.weekdays weekdayIndex of
       Just name -> name
       Nothing -> show weekdayIndex
   in
-    show day <> " de " <> monthName <> " de " <> show year <> " (" <> weekdayName <> ")"
+    dayStr <> "/" <> monthStr <> "/" <> show year <> " (" <> weekdayName <> ")"
