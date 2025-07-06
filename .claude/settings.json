@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "purs-tidy format-in-place src/**/*.purs"
+          }
+        ]
+      }
+    ]
+  }
+}
