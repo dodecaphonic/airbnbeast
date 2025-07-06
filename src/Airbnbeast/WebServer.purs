@@ -54,8 +54,8 @@ parseDate dateStr =
 parseTimeOfDay :: String -> Maybe TimeOfDay
 parseTimeOfDay "morning" = Just Morning
 parseTimeOfDay "afternoon" = Just Afternoon
-parseTimeOfDay "Morning" = Just Morning  -- backward compatibility
-parseTimeOfDay "Afternoon" = Just Afternoon  -- backward compatibility
+parseTimeOfDay "Morning" = Just Morning -- backward compatibility
+parseTimeOfDay "Afternoon" = Just Afternoon -- backward compatibility
 parseTimeOfDay _ = Nothing
 
 -- Find a cleaning window that contains the specified TimeBlock
@@ -117,35 +117,35 @@ routes storage { method: Get, path: [ "application.js" ] } = do
     Left _ ->
       notFound
 
-routes storage { method: Patch, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr, "enable" ] } = do
+routes storage { method: Post, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } = do
   liftEffect $ log $ "Enabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
   case parsePathParameters apartmentName dateStr timeOfDayStr of
     Just { apartment, date, timeOfDay } -> do
       let timeBlock = createTimeBlock apartment date timeOfDay true
       _ <- attempt $ storage.enableTimeBlock timeBlock
-      
+
       -- Return the updated frame content
       schedule <- fetchCleaningSchedule storage
       case findCleaningWindowByTimeBlock timeBlock schedule of
-        Just window -> 
-          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard false window)
+        Just window ->
+          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
         Nothing ->
           notFound
     Nothing ->
       notFound
 
-routes storage { method: Patch, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr, "disable" ] } = do
+routes storage { method: Delete, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } = do
   liftEffect $ log $ "Disabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
   case parsePathParameters apartmentName dateStr timeOfDayStr of
     Just { apartment, date, timeOfDay } -> do
       let timeBlock = createTimeBlock apartment date timeOfDay false
       _ <- attempt $ storage.disableTimeBlock timeBlock
-      
+
       -- Return the updated frame content
       schedule <- fetchCleaningSchedule storage
       case findCleaningWindowByTimeBlock timeBlock schedule of
-        Just window -> 
-          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard false window)
+        Just window ->
+          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
         Nothing ->
           notFound
     Nothing ->
@@ -170,25 +170,25 @@ fetchCleaningSchedule storage = do
   currentDate <- liftEffect nowDate
   guestStays <- fetchGuestStays [ gloria, santa ]
   let baseSchedule = Cleaning.scheduleFromGuestStaysWithDate currentDate guestStays
-  
+
   -- Update each CleaningWindow with disabled TimeBlocks from storage
   traverse (traverse (updateCleaningWindow storage)) baseSchedule
   where
-  
+
   updateCleaningWindow :: Storage -> Cleaning.CleaningWindow -> Aff Cleaning.CleaningWindow
   updateCleaningWindow st window = do
     disabledBlocks <- st.disabledTimeBlocksDuringStay window
     liftEffect $ log $ "Disabled blocks found: " <> show (Array.length disabledBlocks)
     liftEffect $ log $ "Disabled blocks: " <> show disabledBlocks
     pure $ mergeDisabledTimeBlocks window disabledBlocks
-  
+
   mergeDisabledTimeBlocks :: Cleaning.CleaningWindow -> Array Cleaning.TimeBlock -> Cleaning.CleaningWindow
   mergeDisabledTimeBlocks (Cleaning.CleaningWindow record) disabledBlocks =
     let
       updatedTimeBlocks = map (updateTimeBlockAvailability disabledBlocks) record.timeBlocks
     in
       Cleaning.CleaningWindow record { timeBlocks = updatedTimeBlocks }
-  
+
   updateTimeBlockAvailability :: Array Cleaning.TimeBlock -> Cleaning.TimeBlock -> Cleaning.TimeBlock
   updateTimeBlockAvailability disabledBlocks timeBlock@(Cleaning.TimeBlock tb) =
     let
@@ -196,7 +196,7 @@ fetchCleaningSchedule storage = do
       newAvailable = if isDisabled then false else tb.available
     in
       Cleaning.TimeBlock tb { available = newAvailable }
-  
+
   timeBlockMatches :: Cleaning.TimeBlock -> Cleaning.TimeBlock -> Boolean
   timeBlockMatches (Cleaning.TimeBlock a) (Cleaning.TimeBlock b) =
     a.date == b.date && a.timeOfDay == b.timeOfDay && a.apartment == b.apartment
@@ -207,8 +207,8 @@ startServer { port, storage } = do
   log "📋 Available routes:"
   log "  / - Full cleaning schedule"
   log "  /apartment/:name - Apartment-specific schedule"
-  log "  PATCH /apartments/:apartment/time-blocks/:date/:timeOfDay/enable - Enable time block"
-  log "  PATCH /apartments/:apartment/time-blocks/:date/:timeOfDay/disable - Disable time block"
+  log "  POST /apartments/:apartment/time-blocks/:date/:timeOfDay - Enable time block"
+  log "  DELETE /apartments/:apartment/time-blocks/:date/:timeOfDay - Disable time block"
   log ""
   serve port (routes storage) do
     log $ "✅ Server is running on http://localhost:" <> show port

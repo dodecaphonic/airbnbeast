@@ -42,6 +42,8 @@ head title = tag "head" [] $
   tag "meta" [ attr "charset" "utf-8" ] ""
     <> tag "meta" [ attr "name" "viewport", attr "content" "width=device-width, initial-scale=1" ] ""
     <> tag "meta" [ attr "name" "turbo-cache-control", attr "content" "no-cache" ] ""
+    <> tag "meta" [ attr "name" "turbo-refresh-method", attr "content" "morph" ] ""
+    <> tag "meta" [ attr "name" "turbo-refresh-scroll", attr "content" "preserve" ] ""
     <> tag "title" [] title
     <> tag "link" [ attr "rel" "stylesheet", attr "href" "/tailwind.css" ] ""
     <> tag "script" [ attr "src" "/application.js" ] ""
@@ -138,7 +140,7 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
         <> "-"
         <> (if fromEnum (Date.day date) < 10 then "0" else "")
         <> show (fromEnum $ Date.day date)
-      
+
       apartmentName = case apartment of
         Apartment name -> case name of
           "Glória" -> "gloria"
@@ -149,18 +151,19 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
         Morning -> "morning"
         Afternoon -> "afternoon"
 
-      -- Determine action: if currently available, we want to disable it; if unavailable, we want to enable it
-      action = if available then "disable" else "enable"
-      
-      -- Build the RESTful URL: /apartments/:apartment/time-blocks/:date/:timeOfDay/:action
-      href = "/apartments/" <> apartmentName <> "/time-blocks/" <> dateStr <> "/" <> timeOfDayStr <> "/" <> action
+      -- Build the RESTful URL: /apartments/:apartment/time-blocks/:date/:timeOfDay
+      href = "/apartments/" <> apartmentName <> "/time-blocks/" <> dateStr <> "/" <> timeOfDayStr
 
-      linkAttrs = if isDisabled 
-        then [ attr "class" (baseClasses <> statusClasses) ]
-        else [ attr "class" (baseClasses <> statusClasses)
-             , attr "href" href
-             , attr "data-turbo-method" "patch"
-             ]
+      -- Determine HTTP method: POST for enable (when currently unavailable), DELETE for disable (when currently available)
+      turboMethod = if available then "delete" else "post"
+
+      linkAttrs =
+        if isDisabled then [ attr "class" (baseClasses <> statusClasses) ]
+        else
+          [ attr "class" (baseClasses <> statusClasses)
+          , attr "href" href
+          , attr "data-turbo-method" turboMethod
+          ]
     in
       tag "a" linkAttrs timeLabel
 
@@ -222,8 +225,8 @@ calculateEffectiveDateRange timeBlocks originalFrom originalTo =
     in
       pure $ DateTime date time
 
-cleaningWindowCard :: Boolean -> CleaningWindow -> HtmlString
-cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay, timeBlocks }) =
+cleaningWindowCard :: { isFirst :: Boolean, isOpen :: Boolean } -> CleaningWindow -> HtmlString
+cleaningWindowCard { isFirst, isOpen } window@(CleaningWindow { from, to, stay, timeBlocks }) =
   let
     -- Generate unique frame ID based on apartment and stay details
     frameId = "cleaning-window-" <> apartmentToUrl stay.apartment <> "-" <> stay.last4Digits
@@ -271,25 +274,27 @@ cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay, timeBlocks }
       Nothing ->
         div [ attr "class" dateClasses ] (formatDate from <> " → " <> formatDate to)
 
-    cardContent = div
-      [ attr "class" cardClasses
-      , attr "data-controller" "cleaning-window"
-      , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
-      , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
-      ] $
-      dateRangeDisplay
-        <> div [ attr "class" codeClasses ] stay.last4Digits
-        <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
-        <> div [ attr "class" "text-center" ]
-          ( tag "button"
-              [ attr "class" buttonClasses
-              , attr "data-cleaning-window-target" "button"
-              , attr "data-action" "click->cleaning-window#toggle"
-              ]
-              I18n.pt.adjustPeriods
-          )
-        <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ]
-          (renderTimeBlockGrid window)
+    cardContent =
+      div
+        [ attr "class" cardClasses
+        , attr "data-controller" "cleaning-window"
+        , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
+        , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
+        , attr "data-cleaning-window-time-blocks-visible-value" (show isOpen)
+        ] $
+        dateRangeDisplay
+          <> div [ attr "class" codeClasses ] stay.last4Digits
+          <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
+          <> div [ attr "class" "text-center" ]
+            ( tag "button"
+                [ attr "class" buttonClasses
+                , attr "data-cleaning-window-target" "button"
+                , attr "data-action" "click->cleaning-window#toggle"
+                ]
+                I18n.pt.adjustPeriods
+            )
+          <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ]
+            (renderTimeBlockGrid window)
   in
     turboFrame frameId cardContent
 
@@ -304,7 +309,7 @@ apartmentSection apartment@(Apartment name) windows =
   where
   renderWindowCards :: Array CleaningWindow -> HtmlString
   renderWindowCards ws =
-    Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard (index == 0) window) ws
+    Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard { isFirst: index == 0, isOpen: false } window) ws
 
 cleaningSchedulePage :: Map Apartment (Array CleaningWindow) -> HtmlString
 cleaningSchedulePage schedule =
