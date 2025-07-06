@@ -13,9 +13,8 @@ import Effect.Aff (Aff, attempt)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Now (nowDate)
-import HTTPure (Request, ResponseM, ServerM, header, notFound, ok', serve, found')
+import HTTPure (Request, ResponseM, ServerM, header, notFound, ok', serve)
 import HTTPure.Method (Method(..))
-import HTTPure.Body (toString)
 import Data.String as String
 import Data.Array as Array
 import Data.Array.NonEmpty as NEArray
@@ -35,24 +34,12 @@ normalizeApartmentName "gloria" = Just (Apartment "Glória")
 normalizeApartmentName "santa" = Just (Apartment "Santa")
 normalizeApartmentName _ = Nothing
 
-parseFormData :: String -> Maybe { apartment :: Apartment, date :: Date, timeOfDay :: TimeOfDay }
-parseFormData formData = do
-  let pairs = String.split (String.Pattern "&") formData
-  apartmentStr <- getFormValue "apartment" pairs
-  dateStr <- getFormValue "date" pairs
-  timeOfDayStr <- getFormValue "timeOfDay" pairs
-
+parsePathParameters :: String -> String -> String -> Maybe { apartment :: Apartment, date :: Date, timeOfDay :: TimeOfDay }
+parsePathParameters apartmentStr dateStr timeOfDayStr = do
   apartment <- normalizeApartmentName apartmentStr
   date <- parseDate dateStr
   timeOfDay <- parseTimeOfDay timeOfDayStr
-
   pure { apartment, date, timeOfDay }
-
-getFormValue :: String -> Array String -> Maybe String
-getFormValue key pairs = do
-  let keyPrefix = key <> "="
-  pair <- Array.find (String.contains (String.Pattern keyPrefix)) pairs
-  String.stripPrefix (String.Pattern keyPrefix) pair
 
 parseDate :: String -> Maybe Date
 parseDate dateStr =
@@ -65,8 +52,10 @@ parseDate dateStr =
     _ -> Nothing
 
 parseTimeOfDay :: String -> Maybe TimeOfDay
-parseTimeOfDay "Morning" = Just Morning
-parseTimeOfDay "Afternoon" = Just Afternoon
+parseTimeOfDay "morning" = Just Morning
+parseTimeOfDay "afternoon" = Just Afternoon
+parseTimeOfDay "Morning" = Just Morning  -- backward compatibility
+parseTimeOfDay "Afternoon" = Just Afternoon  -- backward compatibility
 parseTimeOfDay _ = Nothing
 
 -- Find a cleaning window that contains the specified TimeBlock
@@ -128,15 +117,14 @@ routes storage { method: Get, path: [ "application.js" ] } = do
     Left _ ->
       notFound
 
-routes storage { method: Patch, path: [ "timeblocks", "enable" ], body } = do
-  liftEffect $ log "Enabling time block"
-  bodyText <- toString body
-  case parseFormData bodyText of
+routes storage { method: Patch, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr, "enable" ] } = do
+  liftEffect $ log $ "Enabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
+  case parsePathParameters apartmentName dateStr timeOfDayStr of
     Just { apartment, date, timeOfDay } -> do
       let timeBlock = createTimeBlock apartment date timeOfDay true
       _ <- attempt $ storage.enableTimeBlock timeBlock
       
-      -- Return the updated frame content instead of redirecting
+      -- Return the updated frame content
       schedule <- fetchCleaningSchedule storage
       case findCleaningWindowByTimeBlock timeBlock schedule of
         Just window -> 
@@ -146,15 +134,14 @@ routes storage { method: Patch, path: [ "timeblocks", "enable" ], body } = do
     Nothing ->
       notFound
 
-routes storage { method: Patch, path: [ "timeblocks", "disable" ], body } = do
-  liftEffect $ log "Disabling time block"
-  bodyText <- toString body
-  case parseFormData bodyText of
+routes storage { method: Patch, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr, "disable" ] } = do
+  liftEffect $ log $ "Disabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
+  case parsePathParameters apartmentName dateStr timeOfDayStr of
     Just { apartment, date, timeOfDay } -> do
       let timeBlock = createTimeBlock apartment date timeOfDay false
       _ <- attempt $ storage.disableTimeBlock timeBlock
       
-      -- Return the updated frame content instead of redirecting
+      -- Return the updated frame content
       schedule <- fetchCleaningSchedule storage
       case findCleaningWindowByTimeBlock timeBlock schedule of
         Just window -> 
@@ -220,8 +207,8 @@ startServer { port, storage } = do
   log "📋 Available routes:"
   log "  / - Full cleaning schedule"
   log "  /apartment/:name - Apartment-specific schedule"
-  log "  PATCH /timeblocks/enable - Enable time block"
-  log "  PATCH /timeblocks/disable - Disable time block"
+  log "  PATCH /apartments/:apartment/time-blocks/:date/:timeOfDay/enable - Enable time block"
+  log "  PATCH /apartments/:apartment/time-blocks/:date/:timeOfDay/disable - Disable time block"
   log ""
   serve port (routes storage) do
     log $ "✅ Server is running on http://localhost:" <> show port

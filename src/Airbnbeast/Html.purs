@@ -118,7 +118,6 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
   renderTimeBlock :: Int -> TimeBlock -> HtmlString
   renderTimeBlock availableCount (TimeBlock { date, timeOfDay, available, apartment }) =
     let
-      blockId = "block-" <> apartmentName <> "-" <> show date <> "-" <> show timeOfDay
       timeLabel = case timeOfDay of
         Morning -> I18n.pt.morning
         Afternoon -> I18n.pt.afternoon
@@ -126,7 +125,7 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
       -- Determine if this block can be toggled
       isDisabled = available && availableCount <= 1 -- Can't disable the last available block
 
-      baseClasses = "text-xs px-2 py-1 rounded transition-colors "
+      baseClasses = "text-xs px-2 py-1 rounded transition-colors no-underline "
       statusClasses =
         if available then
           if isDisabled then "bg-gray-50 text-gray-400 cursor-not-allowed"
@@ -139,25 +138,31 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
         <> "-"
         <> (if fromEnum (Date.day date) < 10 then "0" else "")
         <> show (fromEnum $ Date.day date)
+      
       apartmentName = case apartment of
         Apartment name -> case name of
           "Glória" -> "gloria"
           "Santa" -> "santa"
           _ -> name
 
-      disabledAttr = if isDisabled then [ attr "disabled" "disabled" ] else []
+      timeOfDayStr = case timeOfDay of
+        Morning -> "morning"
+        Afternoon -> "afternoon"
+
+      -- Determine action: if currently available, we want to disable it; if unavailable, we want to enable it
+      action = if available then "disable" else "enable"
+      
+      -- Build the RESTful URL: /apartments/:apartment/time-blocks/:date/:timeOfDay/:action
+      href = "/apartments/" <> apartmentName <> "/time-blocks/" <> dateStr <> "/" <> timeOfDayStr <> "/" <> action
+
+      linkAttrs = if isDisabled 
+        then [ attr "class" (baseClasses <> statusClasses) ]
+        else [ attr "class" (baseClasses <> statusClasses)
+             , attr "href" href
+             , attr "data-turbo-method" "patch"
+             ]
     in
-      tag "button"
-        ( [ attr "class" (baseClasses <> statusClasses)
-          , attr "id" blockId
-          , attr "data-controller" "time-block"
-          , attr "data-time-block-apartment-value" apartmentName
-          , attr "data-time-block-date-value" dateStr
-          , attr "data-time-block-time-of-day-value" (show timeOfDay)
-          , attr "data-action" "click->time-block#toggleBlock"
-          ] <> disabledAttr
-        )
-        timeLabel
+      tag "a" linkAttrs timeLabel
 
   formatDateOnly :: Date.Date -> String
   formatDateOnly date =
