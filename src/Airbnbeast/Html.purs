@@ -168,46 +168,50 @@ renderTimeBlockGrid window =
     in
       dayStr <> "/" <> monthStr
 
-cleaningWindowCard :: CleaningWindow -> HtmlString
-cleaningWindowCard window@(CleaningWindow { from, to, stay }) =
-    div [ attr "class" "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
+cleaningWindowCard :: Boolean -> CleaningWindow -> HtmlString
+cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay }) =
+  let
+    cardClasses = if isFirst 
+      then "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
+      else "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
+    
+    dateClasses = if isFirst
+      then "text-sm text-blue-700 mb-2 text-center"
+      else "text-sm text-gray-600 mb-2 text-center"
+    
+    codeClasses = if isFirst
+      then "text-3xl font-bold text-blue-800 mb-3 text-center font-mono"
+      else "text-3xl font-bold text-blue-600 mb-3 text-center font-mono"
+    
+    linkClasses = if isFirst
+      then "text-blue-700 hover:text-blue-900 text-sm"
+      else "text-blue-600 hover:text-blue-800 text-sm"
+    
+    buttonClasses = if isFirst
+      then "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
+      else "text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full transition-colors"
+    
+    gridClasses = if isFirst
+      then "hidden mt-4 pt-4 border-t border-blue-300"
+      else "hidden mt-4 pt-4 border-t border-gray-200"
+  in
+    div [ attr "class" cardClasses
         , attr "data-controller" "cleaning-window"
         , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
         , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
         ] $
-      div [ attr "class" "text-sm text-gray-600 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
-        <> div [ attr "class" "text-3xl font-bold text-blue-600 mb-3 text-center font-mono" ] stay.last4Digits
-        <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-600 hover:text-blue-800 text-sm" ] I18n.pt.viewReservation)
+      div [ attr "class" dateClasses ] (formatDate from <> " → " <> formatDate to)
+        <> div [ attr "class" codeClasses ] stay.last4Digits
+        <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
         <> div [ attr "class" "text-center" ] 
           (tag "button" 
-            [ attr "class" "text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full transition-colors"
+            [ attr "class" buttonClasses
             , attr "data-cleaning-window-target" "button"
             , attr "data-action" "click->cleaning-window#toggle"
             ] 
             I18n.pt.adjustPeriods
           )
-        <> div [ attr "data-cleaning-window-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-gray-200" ] 
-          (renderTimeBlockGrid window)
-
-cleaningWindowCardFirst :: CleaningWindow -> HtmlString
-cleaningWindowCardFirst window@(CleaningWindow { from, to, stay }) =
-    div [ attr "class" "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
-        , attr "data-controller" "cleaning-window"
-        , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
-        , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
-        ] $
-      div [ attr "class" "text-sm text-blue-700 mb-2 text-center" ] (formatDate from <> " → " <> formatDate to)
-        <> div [ attr "class" "text-3xl font-bold text-blue-800 mb-3 text-center font-mono" ] stay.last4Digits
-        <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" "text-blue-700 hover:text-blue-900 text-sm" ] I18n.pt.viewReservation)
-        <> div [ attr "class" "text-center" ] 
-          (tag "button" 
-            [ attr "class" "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
-            , attr "data-cleaning-window-target" "button"
-            , attr "data-action" "click->cleaning-window#toggle"
-            ] 
-            I18n.pt.adjustPeriods
-          )
-        <> div [ attr "data-cleaning-window-target" "grid", attr "class" "hidden mt-4 pt-4 border-t border-blue-300" ] 
+        <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ] 
           (renderTimeBlockGrid window)
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
@@ -226,9 +230,7 @@ apartmentSection apartment@(Apartment name) windows =
       -- Process all windows through time block system
       processedWindows = Array.mapMaybe processCleaningWindow ws
     in
-      case Array.uncons processedWindows of
-        Just { head: first, tail: rest } -> cleaningWindowCardFirst first <> Array.foldMap cleaningWindowCard rest
-        Nothing -> ""
+      Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard (index == 0) window) processedWindows
 
 cleaningSchedulePage :: Map Apartment (Array CleaningWindow) -> HtmlString
 cleaningSchedulePage schedule =
