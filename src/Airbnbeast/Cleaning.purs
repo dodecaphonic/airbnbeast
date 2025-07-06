@@ -4,6 +4,8 @@ import Prelude
 
 import Airbnbeast.Availability (Apartment, GuestStay)
 import Data.Array as Array
+import Data.Array.NonEmpty (NonEmptyArray)
+import Data.Array.NonEmpty as NEArray
 import Data.Date (Date, Weekday(..))
 import Data.Date as Date
 import Data.DateTime (DateTime(..), Time(..))
@@ -36,6 +38,7 @@ newtype CleaningWindow = CleaningWindow
   , to :: DateTime
   , weekend :: CleaningWeekend
   , stay :: GuestStay
+  , timeBlocks :: NonEmptyArray TimeBlock
   }
 
 derive instance Newtype CleaningWindow _
@@ -143,13 +146,17 @@ scheduleFromGuestStays =
 
     let
       weekend = weekendCoverage startDate endDate
+      timeBlocks = cleaningWindowToTimeBlocks cleaningStart cleaningEnd stay
 
-    pure $ CleaningWindow
-      { from: cleaningStart
-      , to: cleaningEnd
-      , weekend
-      , stay
-      }
+    case NEArray.fromArray timeBlocks of
+      Just nonEmptyTimeBlocks -> pure $ CleaningWindow
+        { from: cleaningStart
+        , to: cleaningEnd
+        , weekend
+        , stay
+        , timeBlocks: nonEmptyTimeBlocks
+        }
+      Nothing -> Nothing -- This shouldn't happen if the window is valid
 
   atCleaningStart :: Date -> Maybe DateTime
   atCleaningStart refDate = do
@@ -193,9 +200,9 @@ isValidCleaningWindow currentDate (CleaningWindow { to }) =
     -- (cleaning window end date must be today or in the future)
     cleaningEndDate >= currentDate
 
--- Convert a CleaningWindow to a series of TimeBlocks
-cleaningWindowToTimeBlocks :: CleaningWindow -> Array TimeBlock
-cleaningWindowToTimeBlocks (CleaningWindow { from, to, stay }) =
+-- Convert cleaning window parameters to a series of TimeBlocks
+cleaningWindowToTimeBlocks :: DateTime -> DateTime -> GuestStay -> Array TimeBlock
+cleaningWindowToTimeBlocks from to stay =
   let
     startDate = DateTime.date from
     endDate = DateTime.date to
@@ -238,10 +245,10 @@ cleaningWindowToTimeBlocks (CleaningWindow { from, to, stay }) =
         [ morningBlock, afternoonBlock ]
 
 -- Convert consecutive available TimeBlocks back to a readable date range
-timeBlocksToDateRange :: Array TimeBlock -> Maybe { from :: DateTime, to :: DateTime }
+timeBlocksToDateRange :: NonEmptyArray TimeBlock -> Maybe { from :: DateTime, to :: DateTime }
 timeBlocksToDateRange blocks =
   let
-    availableBlocks = Array.filter (\(TimeBlock { available }) -> available) blocks
+    availableBlocks = NEArray.filter (\(TimeBlock { available }) -> available) blocks
     sortedBlocks = Array.sortBy compareTimeBlocks availableBlocks
   in
     case Array.uncons sortedBlocks of

@@ -3,7 +3,7 @@ module Airbnbeast.Html where
 import Prelude hiding (div)
 
 import Airbnbeast.Availability (Apartment(..))
-import Airbnbeast.Cleaning (CleaningWindow(..), TimeOfDay(..), TimeBlock(..), cleaningWindowToTimeBlocks, timeBlocksToDateRange)
+import Airbnbeast.Cleaning (CleaningWindow(..), TimeOfDay(..), TimeBlock(..), timeBlocksToDateRange)
 import Airbnbeast.I18n as I18n
 import Data.Array as Array
 import Data.Array.NonEmpty as NEArray
@@ -83,27 +83,24 @@ apartmentToUrl (Apartment name) = name -- fallback for any other apartments
 -- For now, this just demonstrates the round-trip conversion
 -- Later we'll add manual override functionality here
 processCleaningWindow :: CleaningWindow -> Maybe CleaningWindow
-processCleaningWindow window@(CleaningWindow { stay }) =
-  let
-    timeBlocks = cleaningWindowToTimeBlocks window
+processCleaningWindow window@(CleaningWindow { stay, timeBlocks }) =
   -- TODO: Apply manual overrides here by setting available = false for blocked periods
-  in
-    case timeBlocksToDateRange timeBlocks of
-      Just { from, to } ->
-        Just $ CleaningWindow
-          { from
-          , to
-          , weekend: (unwrap window).weekend -- Preserve weekend info for now
-          , stay
-          }
-      Nothing -> Nothing
+  case timeBlocksToDateRange timeBlocks of
+    Just { from, to } ->
+      Just $ CleaningWindow
+        { from
+        , to
+        , weekend: (unwrap window).weekend -- Preserve weekend info for now
+        , stay
+        , timeBlocks
+        }
+    Nothing -> Nothing
 
 -- Render the time block grid for a cleaning window
 renderTimeBlockGrid :: CleaningWindow -> HtmlString
-renderTimeBlockGrid window =
+renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
   let
-    timeBlocks = cleaningWindowToTimeBlocks window
-    groupedByDate = groupBlocksByDate timeBlocks
+    groupedByDate = groupBlocksByDate (NEArray.toArray timeBlocks)
   in
     div [ attr "class" "space-y-2" ] $
       div [ attr "class" "text-xs text-gray-600 mb-2 text-center" ] I18n.pt.clickToToggle <>
