@@ -15,6 +15,7 @@ import Data.Either (Either(..))
 import Data.Enum (fromEnum, toEnum)
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
+import Data.Maybe as Maybe
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..))
 import Data.String as String
@@ -155,15 +156,15 @@ sqliteDisabledTimeBlocksDuringStay conn (CleaningWindow { from, to, stay }) = do
 
   parseDate :: String -> Aff Date.Date
   parseDate dateStr = do
-    case String.split (Pattern "-") dateStr of
-      [ yearStr, monthStr, dayStr ] -> do
-        case { year: Int.fromString yearStr, month: Int.fromString monthStr, day: Int.fromString dayStr } of
-          { year: Just y, month: Just m, day: Just d } -> do
-            case { year: toEnum y, month: toEnum m, day: toEnum d } of
-              { year: Just year, month: Just month, day: Just day } -> do
-                pure $ Date.canonicalDate year month day
-              _ -> throwError (error $ "Invalid date components: " <> dateStr)
-          _ -> throwError (error $ "Invalid date format: " <> dateStr)
+    case traverse Int.fromString (String.split (Pattern "-") dateStr) of
+      Just [ yearStr, monthStr, dayStr ] ->
+        Maybe.fromMaybe (throwError $ error $ "Invalid date format: " <> dateStr) do
+          year <- toEnum yearStr
+          month <- toEnum monthStr
+          day <- toEnum dayStr
+
+          pure (pure $ Date.canonicalDate year month day)
+
       _ -> throwError (error $ "Invalid date format: " <> dateStr)
 
   parseTimeOfDay :: String -> Aff TimeOfDay
