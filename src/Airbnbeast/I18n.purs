@@ -27,6 +27,7 @@ type Translations =
   , clickToToggle :: String
   , morning :: String
   , afternoon :: String
+  , spottyRange :: String
   }
 
 pt :: Translations
@@ -57,6 +58,7 @@ pt =
   , clickToToggle: "Clique para bloquear/desbloquear períodos:"
   , morning: "Manhã"
   , afternoon: "Tarde"
+  , spottyRange: "Nem todas as datas estão disponíveis. Verifique no calendário abaixo."
   }
 
 formatDatePt :: DateTime -> String

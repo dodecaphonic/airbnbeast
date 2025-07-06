@@ -7,12 +7,14 @@ import Airbnbeast.Cleaning (CleaningWindow(..), TimeOfDay(..), TimeBlock(..))
 import Airbnbeast.I18n as I18n
 import Data.Array as Array
 import Data.Array.NonEmpty as NEArray
+import Data.DateTime (DateTime(..))
 import Data.DateTime as DateTime
 import Data.Date as Date
-import Data.Enum (fromEnum)
+import Data.Enum (fromEnum, enumFromTo)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Set as Set
 import Data.Tuple.Nested ((/\))
 
 type HtmlString = String
@@ -163,8 +165,56 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
     in
       dayStr <> "/" <> monthStr
 
+-- Calculate the effective date range by trimming unavailable dates from the ends
+-- and detecting if there are gaps in availability
+calculateEffectiveDateRange
+  :: NEArray.NonEmptyArray TimeBlock
+  -> DateTime
+  -> DateTime
+  -> { effectiveRange :: Maybe { from :: DateTime, to :: DateTime }, hasGaps :: Boolean }
+calculateEffectiveDateRange timeBlocks originalFrom originalTo =
+  let
+    timeBlocksArray = NEArray.toArray timeBlocks
+    availableBlocks = Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
+    availableDates = Set.fromFoldable $ map (\(TimeBlock { date }) -> date) availableBlocks
+
+    -- Find the earliest and latest available dates
+    sortedAvailableDates = Array.sort $ Set.toUnfoldable availableDates
+
+    -- Calculate effective range
+    effectiveRange = do
+      firstAvailableDate <- Array.head sortedAvailableDates
+      lastAvailableDate <- Array.last sortedAvailableDates
+
+      -- Create DateTime objects for the effective range
+      effectiveFrom <- createDateTimeFromDate firstAvailableDate originalFrom
+      effectiveTo <- createDateTimeFromDate lastAvailableDate originalTo
+
+      pure { from: effectiveFrom, to: effectiveTo }
+
+    -- Check for gaps: if we have an effective range, see if all dates in that range have availability
+    hasGaps = case effectiveRange of
+      Just { from: effFrom, to: effTo } ->
+        let
+          effectiveFromDate = DateTime.date effFrom
+          effectiveToDate = DateTime.date effTo
+          allDatesInRange = enumFromTo effectiveFromDate effectiveToDate
+          availableDatesInRange = Array.filter (\date -> Set.member date availableDates) allDatesInRange
+        in
+          Array.length availableDatesInRange < Array.length allDatesInRange
+      Nothing -> false
+  in
+    { effectiveRange, hasGaps }
+  where
+  createDateTimeFromDate :: Date.Date -> DateTime -> Maybe DateTime
+  createDateTimeFromDate date originalDateTime =
+    let
+      time = DateTime.time originalDateTime
+    in
+      pure $ DateTime date time
+
 cleaningWindowCard :: Boolean -> CleaningWindow -> HtmlString
-cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay }) =
+cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay, timeBlocks }) =
   let
     cardClasses =
       if isFirst then "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
@@ -189,6 +239,25 @@ cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay }) =
     gridClasses =
       if isFirst then "hidden mt-4 pt-4 border-t border-blue-300"
       else "hidden mt-4 pt-4 border-t border-gray-200"
+
+    -- Calculate effective date range based on available TimeBlocks
+    { effectiveRange, hasGaps } = calculateEffectiveDateRange timeBlocks from to
+
+    dateRangeDisplay = case effectiveRange of
+      Just { from: effectiveFrom, to: effectiveTo } ->
+        let
+          fromDate = DateTime.date effectiveFrom
+          toDate = DateTime.date effectiveTo
+          rangeText =
+            if fromDate == toDate then formatDate effectiveFrom
+            else formatDate effectiveFrom <> " → " <> formatDate effectiveTo
+        in
+          div [ attr "class" dateClasses ] rangeText <>
+            if hasGaps then
+              div [ attr "class" "text-xs text-red-500 mt-1 mb-4 text-center" ] I18n.pt.spottyRange
+            else ""
+      Nothing ->
+        div [ attr "class" dateClasses ] (formatDate from <> " → " <> formatDate to)
   in
     div
       [ attr "class" cardClasses
@@ -196,7 +265,7 @@ cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay }) =
       , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
       , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
       ] $
-      div [ attr "class" dateClasses ] (formatDate from <> " → " <> formatDate to)
+      dateRangeDisplay
         <> div [ attr "class" codeClasses ] stay.last4Digits
         <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
         <> div [ attr "class" "text-center" ]
