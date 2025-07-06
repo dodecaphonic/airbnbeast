@@ -8,6 +8,7 @@ import Prelude
 
 import Airbnbeast.Availability (Apartment(..))
 import Airbnbeast.Cleaning (CleaningWindow(..), TimeBlock(..), TimeOfDay(..))
+import Airbnbeast.Auth (User, UserId(..), Username(..), AuthError(..))
 import Data.Argonaut.Decode (class DecodeJson, decodeJson, (.:))
 import Data.Date as Date
 import Data.DateTime as DateTime
@@ -24,12 +25,14 @@ import Effect.Aff (Aff, error, throwError)
 import Effect.Class (liftEffect)
 import Effect.Console as Console
 import Foreign (unsafeFromForeign, unsafeToForeign)
+import Node.Bcrypt (comparePassword)
 import SQLite3 as SQLite3
 
 type Storage =
   { disableTimeBlock :: TimeBlock -> Aff TimeBlock
   , enableTimeBlock :: TimeBlock -> Aff TimeBlock
   , disabledTimeBlocksDuringStay :: CleaningWindow -> Aff (Array TimeBlock)
+  , authenticateUser :: String -> String -> Aff (Either AuthError User)
   }
 
 newtype RawTimeBlock = RawTimeBlock
@@ -47,11 +50,28 @@ instance DecodeJson RawTimeBlock where
 
     pure $ RawTimeBlock { apartment, date, timeOfDay }
 
+newtype RawUser = RawUser
+  { id :: Int
+  , username :: String
+  , password_hash :: String
+  , is_admin :: Boolean
+  }
+
+instance DecodeJson RawUser where
+  decodeJson json = do
+    obj <- decodeJson json
+    id <- obj .: "id"
+    username <- obj .: "username"
+    password_hash <- obj .: "password_hash"
+    is_admin <- (\b -> b == 1) <$> obj .: "is_admin"
+    pure $ RawUser { id, username, password_hash, is_admin }
+
 sqliteStorage :: SQLite3.DBConnection -> Storage
 sqliteStorage conn =
   { disableTimeBlock: sqliteDisableTimeBlock conn
   , enableTimeBlock: sqliteEnableTimeBlock conn
   , disabledTimeBlocksDuringStay: sqliteDisabledTimeBlocksDuringStay conn
+  , authenticateUser: sqliteAuthenticateUser conn
   }
 
 sqliteDisableTimeBlock :: SQLite3.DBConnection -> TimeBlock -> Aff TimeBlock
@@ -171,4 +191,35 @@ sqliteDisabledTimeBlocksDuringStay conn (CleaningWindow { from, to, stay }) = do
   parseTimeOfDay "Morning" = pure Morning
   parseTimeOfDay "Afternoon" = pure Afternoon
   parseTimeOfDay other = throwError (error $ "Invalid time of day: " <> other)
+
+sqliteAuthenticateUser :: SQLite3.DBConnection -> String -> String -> Aff (Either AuthError User)
+sqliteAuthenticateUser conn username password = do
+  liftEffect $ Console.log $ "Authenticating user: " <> username
+
+  let
+    sql =
+      """
+      SELECT id, username, password_hash, is_admin
+      FROM users
+      WHERE username = ?
+      LIMIT 1
+    """
+
+  results <- (decodeJson <<< unsafeFromForeign) <$> SQLite3.queryDB conn sql
+    [ unsafeToForeign username ]
+
+  case results of
+    Right (users :: Array RawUser) ->
+      case users of
+        [ RawUser { id, username: dbUsername, password_hash, is_admin } ] -> do
+          if comparePassword password password_hash then pure $ Right
+            { id: UserId id
+            , username: Username dbUsername
+            , isAdmin: is_admin
+            }
+          else pure $ Left InvalidCredentials
+        [] -> pure $ Left UserNotFound
+        _ -> pure $ Left (DatabaseError "Multiple users found with same username")
+
+    Left e -> pure $ Left (DatabaseError $ "Failed to query users: " <> show e)
 

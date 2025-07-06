@@ -28,6 +28,16 @@ type Translations =
   , morning :: String
   , afternoon :: String
   , spottyRange :: String
+  , login :: String
+  , username :: String
+  , password :: String
+  , loginButton :: String
+  , logout :: String
+  , loginPageTitle :: String
+  , invalidCredentials :: String
+  , loginRequired :: String
+  , serverError :: String
+  , invalidLoginData :: String
   }
 
 pt :: Translations
@@ -59,6 +69,16 @@ pt =
   , morning: "Manhã"
   , afternoon: "Tarde"
   , spottyRange: "Nem todas as datas estão disponíveis. Verifique no calendário abaixo."
+  , login: "Entrar"
+  , username: "Usuário"
+  , password: "Senha"
+  , loginButton: "Entrar"
+  , logout: "Sair"
+  , loginPageTitle: "Login - Airbnbeast"
+  , invalidCredentials: "Usuário ou senha inválidos"
+  , loginRequired: "Login necessário para acessar esta página"
+  , serverError: "Erro interno do servidor"
+  , invalidLoginData: "Dados de login inválidos"
   }
 
 formatDatePt :: DateTime -> String

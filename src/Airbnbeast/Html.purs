@@ -352,3 +352,43 @@ indexPage =
                   )
             )
         )
+
+loginPage :: Maybe String -> HtmlString
+loginPage errorMsg =
+  html $
+    head I18n.pt.loginPageTitle <>
+      body
+        ( div [ attr "class" "min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8" ]
+            ( div [ attr "class" "w-full sm:max-w-md" ]
+                ( div [ attr "class" "bg-white shadow-2xl rounded-2xl px-8 py-10 space-y-8" ]
+                    ( div [ attr "class" "text-center" ]
+                        ( h1 [ attr "class" "text-5xl font-bold text-gray-900 mb-3" ] "🏠"
+                            <> div [ attr "class" "text-3xl font-bold text-blue-600 mb-2" ] "Airbnbeast"
+                            <>
+                              h2 [ attr "class" "text-lg text-gray-600 font-medium" ] I18n.pt.login
+                        )
+                        <>
+                          ( case errorMsg of
+                              Just err -> div [ attr "class" "mt-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm" ] err
+                              Nothing -> ""
+                          )
+                        <>
+                          tag "form" [ attr "class" "mt-8 space-y-6", attr "action" "/auth/login", attr "method" "POST" ]
+                            ( div [ attr "class" "space-y-5" ]
+                                ( div []
+                                    ( tag "label" [ attr "for" "username", attr "class" "block text-sm font-semibold text-gray-700 mb-2" ] I18n.pt.username <>
+                                        tag "input" [ attr "id" "username", attr "name" "username", attr "type" "text", attr "required" "true", attr "class" "block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" ] ""
+                                    ) <>
+                                    div []
+                                      ( tag "label" [ attr "for" "password", attr "class" "block text-sm font-semibold text-gray-700 mb-2" ] I18n.pt.password <>
+                                          tag "input" [ attr "id" "password", attr "name" "password", attr "type" "password", attr "required" "true", attr "class" "block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" ] ""
+                                      )
+                                ) <>
+                                div []
+                                  ( tag "button" [ attr "type" "submit", attr "class" "w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors" ] I18n.pt.loginButton
+                                  )
+                            )
+                    )
+                )
+            )
+        )
