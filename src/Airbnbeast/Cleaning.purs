@@ -1,4 +1,4 @@
-module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..), TimeOfDay(..), TimeBlock(..), prettyPrintWindow, scheduleFromGuestStays, scheduleFromGuestStaysWithDate, cleaningWindowToTimeBlocks, timeBlocksToDateRange) where
+module Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..), TimeOfDay(..), TimeBlock(..), prettyPrintWindow, scheduleFromGuestStays, scheduleFromGuestStaysWithDate, cleaningWindowToTimeBlocks) where
 
 import Prelude
 
@@ -244,41 +244,3 @@ cleaningWindowToTimeBlocks from to stay =
         -- Middle days: both morning and afternoon
         [ morningBlock, afternoonBlock ]
 
--- Convert consecutive available TimeBlocks back to a readable date range
-timeBlocksToDateRange :: NonEmptyArray TimeBlock -> Maybe { from :: DateTime, to :: DateTime }
-timeBlocksToDateRange blocks =
-  let
-    availableBlocks = NEArray.filter (\(TimeBlock { available }) -> available) blocks
-    sortedBlocks = Array.sortBy compareTimeBlocks availableBlocks
-  in
-    case Array.uncons sortedBlocks of
-      Just { head: TimeBlock firstBlock } ->
-        case Array.last sortedBlocks of
-          Just (TimeBlock lastBlock) ->
-            let
-              startTime = case firstBlock.timeOfDay of
-                Morning -> createTime 8 0 0 0 -- 8:00 AM
-                Afternoon -> createTime 13 0 0 0 -- 1:00 PM
-
-              endTime = case lastBlock.timeOfDay of
-                Morning -> createTime 13 0 0 0 -- 1:00 PM
-                Afternoon -> createTime 18 0 0 0 -- 6:00 PM
-            in
-              case startTime /\ endTime of
-                Just st /\ Just et ->
-                  Just
-                    { from: DateTime firstBlock.date st
-                    , to: DateTime lastBlock.date et
-                    }
-                _ -> Nothing
-          Nothing -> Nothing
-      Nothing -> Nothing
-  where
-  compareTimeBlocks :: TimeBlock -> TimeBlock -> Ordering
-  compareTimeBlocks (TimeBlock a) (TimeBlock b) =
-    case compare a.date b.date of
-      EQ -> compare a.timeOfDay b.timeOfDay
-      other -> other
-
-  createTime :: Int -> Int -> Int -> Int -> Maybe Time
-  createTime h m s ms = Time <$> toEnum h <*> toEnum m <*> toEnum s <*> toEnum ms

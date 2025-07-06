@@ -3,7 +3,7 @@ module Airbnbeast.Html where
 import Prelude hiding (div)
 
 import Airbnbeast.Availability (Apartment(..))
-import Airbnbeast.Cleaning (CleaningWindow(..), TimeOfDay(..), TimeBlock(..), timeBlocksToDateRange)
+import Airbnbeast.Cleaning (CleaningWindow(..), TimeOfDay(..), TimeBlock(..))
 import Airbnbeast.I18n as I18n
 import Data.Array as Array
 import Data.Array.NonEmpty as NEArray
@@ -13,7 +13,6 @@ import Data.Enum (fromEnum)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
 import Data.Tuple.Nested ((/\))
 
 type HtmlString = String
@@ -79,22 +78,6 @@ apartmentToUrl (Apartment "Glória") = "gloria"
 apartmentToUrl (Apartment "Santa") = "santa"
 apartmentToUrl (Apartment name) = name -- fallback for any other apartments
 
--- Process cleaning windows through time block system
--- For now, this just demonstrates the round-trip conversion
--- Later we'll add manual override functionality here
-processCleaningWindow :: CleaningWindow -> Maybe CleaningWindow
-processCleaningWindow window@(CleaningWindow { stay, timeBlocks }) =
-  -- TODO: Apply manual overrides here by setting available = false for blocked periods
-  case timeBlocksToDateRange timeBlocks of
-    Just { from, to } ->
-      Just $ CleaningWindow
-        { from
-        , to
-        , weekend: (unwrap window).weekend -- Preserve weekend info for now
-        , stay
-        , timeBlocks
-        }
-    Nothing -> Nothing
 
 -- Render the time block grid for a cleaning window
 renderTimeBlockGrid :: CleaningWindow -> HtmlString
@@ -226,13 +209,8 @@ apartmentSection apartment@(Apartment name) windows =
         renderWindowCards windows
   where
   renderWindowCards :: Array CleaningWindow -> HtmlString
-  renderWindowCards [] = ""
   renderWindowCards ws =
-    let
-      -- Process all windows through time block system
-      processedWindows = Array.mapMaybe processCleaningWindow ws
-    in
-      Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard (index == 0) window) processedWindows
+    Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard (index == 0) window) ws
 
 cleaningSchedulePage :: Map Apartment (Array CleaningWindow) -> HtmlString
 cleaningSchedulePage schedule =
