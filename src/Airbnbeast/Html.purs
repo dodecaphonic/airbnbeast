@@ -78,16 +78,17 @@ apartmentToUrl (Apartment "Glória") = "gloria"
 apartmentToUrl (Apartment "Santa") = "santa"
 apartmentToUrl (Apartment name) = name -- fallback for any other apartments
 
-
 -- Render the time block grid for a cleaning window
 renderTimeBlockGrid :: CleaningWindow -> HtmlString
 renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
   let
-    groupedByDate = groupBlocksByDate (NEArray.toArray timeBlocks)
+    timeBlocksArray = NEArray.toArray timeBlocks
+    availableCount = Array.length $ Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
+    groupedByDate = groupBlocksByDate timeBlocksArray
   in
     div [ attr "class" "space-y-2" ] $
       div [ attr "class" "text-xs text-gray-600 mb-2 text-center" ] I18n.pt.clickToToggle <>
-        Array.foldMap renderDateBlocks groupedByDate
+        Array.foldMap (renderDateBlocks availableCount) groupedByDate
   where
   groupBlocksByDate :: Array TimeBlock -> Array { date :: Date.Date, blocks :: Array TimeBlock }
   groupBlocksByDate blocks =
@@ -102,23 +103,30 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
         )
         grouped
 
-  renderDateBlocks :: { date :: Date.Date, blocks :: Array TimeBlock } -> HtmlString
-  renderDateBlocks { date, blocks } =
+  renderDateBlocks :: Int -> { date :: Date.Date, blocks :: Array TimeBlock } -> HtmlString
+  renderDateBlocks availableCount { date, blocks } =
     div [ attr "class" "flex items-center justify-between py-1" ] $
       div [ attr "class" "text-xs font-medium text-gray-700 w-20" ] (formatDateOnly date) <>
-        div [ attr "class" "flex gap-1" ] (Array.foldMap renderTimeBlock blocks)
+        div [ attr "class" "flex gap-1" ] (Array.foldMap (renderTimeBlock availableCount) blocks)
 
-  renderTimeBlock :: TimeBlock -> HtmlString
-  renderTimeBlock (TimeBlock { date, timeOfDay, available, apartment }) =
+  renderTimeBlock :: Int -> TimeBlock -> HtmlString
+  renderTimeBlock availableCount (TimeBlock { date, timeOfDay, available, apartment }) =
     let
       blockId = "block-" <> apartmentName <> "-" <> show date <> "-" <> show timeOfDay
       timeLabel = case timeOfDay of
         Morning -> I18n.pt.morning
         Afternoon -> I18n.pt.afternoon
-      baseClasses = "text-xs px-2 py-1 rounded cursor-pointer transition-colors "
+
+      -- Determine if this block can be toggled
+      isDisabled = available && availableCount <= 1 -- Can't disable the last available block
+
+      baseClasses = "text-xs px-2 py-1 rounded transition-colors "
       statusClasses =
-        if available then "bg-green-100 text-green-700 hover:bg-green-200"
-        else "bg-red-100 text-red-700 hover:bg-red-200 line-through"
+        if available then
+          if isDisabled then "bg-gray-50 text-gray-400 cursor-not-allowed"
+          else "bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer"
+        else "bg-red-100 text-red-700 hover:bg-red-200 line-through cursor-pointer"
+
       dateStr = show (fromEnum $ Date.year date) <> "-"
         <> (if fromEnum (Date.month date) < 10 then "0" else "")
         <> show (fromEnum $ Date.month date)
@@ -130,16 +138,19 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
           "Glória" -> "gloria"
           "Santa" -> "santa"
           _ -> name
+
+      disabledAttr = if isDisabled then [ attr "disabled" "disabled" ] else []
     in
       tag "button"
-        [ attr "class" (baseClasses <> statusClasses)
-        , attr "id" blockId
-        , attr "data-controller" "time-block"
-        , attr "data-time-block-apartment-value" apartmentName
-        , attr "data-time-block-date-value" dateStr
-        , attr "data-time-block-time-of-day-value" (show timeOfDay)
-        , attr "data-action" "click->time-block#toggleBlock"
-        ]
+        ( [ attr "class" (baseClasses <> statusClasses)
+          , attr "id" blockId
+          , attr "data-controller" "time-block"
+          , attr "data-time-block-apartment-value" apartmentName
+          , attr "data-time-block-date-value" dateStr
+          , attr "data-time-block-time-of-day-value" (show timeOfDay)
+          , attr "data-action" "click->time-block#toggleBlock"
+          ] <> disabledAttr
+        )
         timeLabel
 
   formatDateOnly :: Date.Date -> String
