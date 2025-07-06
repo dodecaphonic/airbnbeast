@@ -22,7 +22,7 @@ import Data.Int as Int
 import Data.Date (Date)
 import Data.Date as Date
 import Data.Traversable (traverse)
-import Data.Enum (toEnum, fromEnum)
+import Data.Enum (toEnum)
 import Airbnbeast.Cleaning (TimeOfDay(..), TimeBlock(..))
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
@@ -99,7 +99,7 @@ routes storage { method: Get, path: [ "apartment", apartmentName ] } = do
     Nothing ->
       notFound
 
-routes storage { method: Get, path: [ "tailwind.css" ] } = do
+routes _ { method: Get, path: [ "tailwind.css" ] } = do
   liftEffect $ log "Serving Tailwind CSS"
   result <- attempt $ readTextFile UTF8 "./dist/tailwind.css"
   case result of
@@ -108,7 +108,7 @@ routes storage { method: Get, path: [ "tailwind.css" ] } = do
     Left _ ->
       notFound
 
-routes storage { method: Get, path: [ "application.js" ] } = do
+routes _ { method: Get, path: [ "application.js" ] } = do
   liftEffect $ log "Serving JavaScript application"
   result <- attempt $ readTextFile UTF8 "./dist/application.js"
   case result of
