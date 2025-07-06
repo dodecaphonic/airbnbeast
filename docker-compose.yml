@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  airbnbeast:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount data directory for SQLite database persistence
+      - ./storage:/app/data
+      # Mount logs directory
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - DATABASE_PATH=/app/data/airbnbeast.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/login', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a reverse proxy for production
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - airbnbeast
+  #   restart: unless-stopped
