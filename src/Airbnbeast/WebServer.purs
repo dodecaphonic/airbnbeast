@@ -39,11 +39,11 @@ parseFormData formData = do
   apartmentStr <- getFormValue "apartment" pairs
   dateStr <- getFormValue "date" pairs
   timeOfDayStr <- getFormValue "timeOfDay" pairs
-  
+
   apartment <- normalizeApartmentName apartmentStr
   date <- parseDate dateStr
   timeOfDay <- parseTimeOfDay timeOfDayStr
-  
+
   pure { apartment, date, timeOfDay }
 
 getFormValue :: String -> Array String -> Maybe String
@@ -53,11 +53,11 @@ getFormValue key pairs = do
   String.stripPrefix (String.Pattern keyPrefix) pair
 
 parseDate :: String -> Maybe Date
-parseDate dateStr = 
+parseDate dateStr =
   case String.split (String.Pattern "-") dateStr of
-    [yearStr, monthStr, dayStr] -> do
+    [ yearStr, monthStr, dayStr ] -> do
       year <- toEnum =<< Int.fromString yearStr
-      month <- toEnum =<< Int.fromString monthStr  
+      month <- toEnum =<< Int.fromString monthStr
       day <- toEnum =<< Int.fromString dayStr
       pure $ Date.canonicalDate year month day
     _ -> Nothing

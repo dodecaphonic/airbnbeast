@@ -71,7 +71,6 @@ div attrs content = tag "div" attrs content
 span :: Array String -> HtmlString -> HtmlString
 span attrs content = tag "span" attrs content
 
-
 formatDate :: DateTime.DateTime -> HtmlString
 formatDate = I18n.formatDatePt
 
@@ -84,13 +83,13 @@ apartmentToUrl (Apartment name) = name -- fallback for any other apartments
 -- For now, this just demonstrates the round-trip conversion
 -- Later we'll add manual override functionality here
 processCleaningWindow :: CleaningWindow -> Maybe CleaningWindow
-processCleaningWindow window@(CleaningWindow { stay }) = 
+processCleaningWindow window@(CleaningWindow { stay }) =
   let
     timeBlocks = cleaningWindowToTimeBlocks window
-    -- TODO: Apply manual overrides here by setting available = false for blocked periods
+  -- TODO: Apply manual overrides here by setting available = false for blocked periods
   in
     case timeBlocksToDateRange timeBlocks of
-      Just { from, to } -> 
+      Just { from, to } ->
         Just $ CleaningWindow
           { from
           , to
@@ -108,25 +107,27 @@ renderTimeBlockGrid window =
   in
     div [ attr "class" "space-y-2" ] $
       div [ attr "class" "text-xs text-gray-600 mb-2 text-center" ] I18n.pt.clickToToggle <>
-      Array.foldMap renderDateBlocks groupedByDate
+        Array.foldMap renderDateBlocks groupedByDate
   where
   groupBlocksByDate :: Array TimeBlock -> Array { date :: Date.Date, blocks :: Array TimeBlock }
   groupBlocksByDate blocks =
     let
-      grouped = Array.groupBy (\(TimeBlock a) (TimeBlock b) -> a.date == b.date) 
-                  (Array.sortBy (\(TimeBlock a) (TimeBlock b) -> compare a.date b.date) blocks)
+      grouped = Array.groupBy (\(TimeBlock a) (TimeBlock b) -> a.date == b.date)
+        (Array.sortBy (\(TimeBlock a) (TimeBlock b) -> compare a.date b.date) blocks)
     in
-      Array.mapMaybe (\group -> 
-        case NEArray.head group of
-          TimeBlock { date } -> Just { date, blocks: NEArray.toArray group }
-      ) grouped
-  
+      Array.mapMaybe
+        ( \group ->
+            case NEArray.head group of
+              TimeBlock { date } -> Just { date, blocks: NEArray.toArray group }
+        )
+        grouped
+
   renderDateBlocks :: { date :: Date.Date, blocks :: Array TimeBlock } -> HtmlString
   renderDateBlocks { date, blocks } =
     div [ attr "class" "flex items-center justify-between py-1" ] $
       div [ attr "class" "text-xs font-medium text-gray-700 w-20" ] (formatDateOnly date) <>
-      div [ attr "class" "flex gap-1" ] (Array.foldMap renderTimeBlock blocks)
-  
+        div [ attr "class" "flex gap-1" ] (Array.foldMap renderTimeBlock blocks)
+
   renderTimeBlock :: TimeBlock -> HtmlString
   renderTimeBlock (TimeBlock { date, timeOfDay, available, apartment }) =
     let
@@ -135,16 +136,19 @@ renderTimeBlockGrid window =
         Morning -> I18n.pt.morning
         Afternoon -> I18n.pt.afternoon
       baseClasses = "text-xs px-2 py-1 rounded cursor-pointer transition-colors "
-      statusClasses = if available 
-        then "bg-green-100 text-green-700 hover:bg-green-200"
+      statusClasses =
+        if available then "bg-green-100 text-green-700 hover:bg-green-200"
         else "bg-red-100 text-red-700 hover:bg-red-200 line-through"
-      dateStr = show (fromEnum $ Date.year date) <> "-" <> 
-                (if fromEnum (Date.month date) < 10 then "0" else "") <> show (fromEnum $ Date.month date) <> "-" <> 
-                (if fromEnum (Date.day date) < 10 then "0" else "") <> show (fromEnum $ Date.day date)
+      dateStr = show (fromEnum $ Date.year date) <> "-"
+        <> (if fromEnum (Date.month date) < 10 then "0" else "")
+        <> show (fromEnum $ Date.month date)
+        <> "-"
+        <> (if fromEnum (Date.day date) < 10 then "0" else "")
+        <> show (fromEnum $ Date.day date)
       apartmentName = case apartment of
         Apartment name -> case name of
           "Glória" -> "gloria"
-          "Santa" -> "santa" 
+          "Santa" -> "santa"
           _ -> name
     in
       tag "button"
@@ -157,7 +161,7 @@ renderTimeBlockGrid window =
         , attr "data-action" "click->time-block#toggleBlock"
         ]
         timeLabel
-  
+
   formatDateOnly :: Date.Date -> String
   formatDateOnly date =
     let
@@ -171,53 +175,54 @@ renderTimeBlockGrid window =
 cleaningWindowCard :: Boolean -> CleaningWindow -> HtmlString
 cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay }) =
   let
-    cardClasses = if isFirst 
-      then "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
+    cardClasses =
+      if isFirst then "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
       else "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
-    
-    dateClasses = if isFirst
-      then "text-sm text-blue-700 mb-2 text-center"
+
+    dateClasses =
+      if isFirst then "text-sm text-blue-700 mb-2 text-center"
       else "text-sm text-gray-600 mb-2 text-center"
-    
-    codeClasses = if isFirst
-      then "text-3xl font-bold text-blue-800 mb-3 text-center font-mono"
+
+    codeClasses =
+      if isFirst then "text-3xl font-bold text-blue-800 mb-3 text-center font-mono"
       else "text-3xl font-bold text-blue-600 mb-3 text-center font-mono"
-    
-    linkClasses = if isFirst
-      then "text-blue-700 hover:text-blue-900 text-sm"
+
+    linkClasses =
+      if isFirst then "text-blue-700 hover:text-blue-900 text-sm"
       else "text-blue-600 hover:text-blue-800 text-sm"
-    
-    buttonClasses = if isFirst
-      then "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
+
+    buttonClasses =
+      if isFirst then "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full transition-colors"
       else "text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full transition-colors"
-    
-    gridClasses = if isFirst
-      then "hidden mt-4 pt-4 border-t border-blue-300"
+
+    gridClasses =
+      if isFirst then "hidden mt-4 pt-4 border-t border-blue-300"
       else "hidden mt-4 pt-4 border-t border-gray-200"
   in
-    div [ attr "class" cardClasses
-        , attr "data-controller" "cleaning-window"
-        , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
-        , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
-        ] $
+    div
+      [ attr "class" cardClasses
+      , attr "data-controller" "cleaning-window"
+      , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
+      , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
+      ] $
       div [ attr "class" dateClasses ] (formatDate from <> " → " <> formatDate to)
         <> div [ attr "class" codeClasses ] stay.last4Digits
         <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
-        <> div [ attr "class" "text-center" ] 
-          (tag "button" 
-            [ attr "class" buttonClasses
-            , attr "data-cleaning-window-target" "button"
-            , attr "data-action" "click->cleaning-window#toggle"
-            ] 
-            I18n.pt.adjustPeriods
+        <> div [ attr "class" "text-center" ]
+          ( tag "button"
+              [ attr "class" buttonClasses
+              , attr "data-cleaning-window-target" "button"
+              , attr "data-action" "click->cleaning-window#toggle"
+              ]
+              I18n.pt.adjustPeriods
           )
-        <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ] 
+        <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ]
           (renderTimeBlockGrid window)
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
 apartmentSection apartment@(Apartment name) windows =
   div [ attr "class" "mb-8" ] $
-    h2 [ attr "class" "text-2xl font-semibold mb-4 pb-2 border-b-2 border-blue-500" ] 
+    h2 [ attr "class" "text-2xl font-semibold mb-4 pb-2 border-b-2 border-blue-500" ]
       (tag "a" [ attr "href" ("/apartment/" <> apartmentToUrl apartment), attr "class" "text-gray-800 hover:text-blue-600 transition-colors no-underline" ] name) <>
       if Array.null windows then div [ attr "class" "text-center text-gray-500 italic py-10" ] I18n.pt.noCleaningWindows
       else div [ attr "class" "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" ] $
@@ -225,7 +230,7 @@ apartmentSection apartment@(Apartment name) windows =
   where
   renderWindowCards :: Array CleaningWindow -> HtmlString
   renderWindowCards [] = ""
-  renderWindowCards ws = 
+  renderWindowCards ws =
     let
       -- Process all windows through time block system
       processedWindows = Array.mapMaybe processCleaningWindow ws
@@ -238,11 +243,11 @@ cleaningSchedulePage schedule =
     head I18n.pt.pageTitle <>
       body
         ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
-          ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] I18n.pt.cleaningSchedule <>
-              if Map.isEmpty schedule then div [ attr "class" "text-center text-gray-500 italic py-20" ] I18n.pt.noCleaningWindows
-              else Array.foldMap (\(apartment /\ windows) -> apartmentSection apartment windows)
-                (Map.toUnfoldable schedule :: Array _)
-          )
+            ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] I18n.pt.cleaningSchedule <>
+                if Map.isEmpty schedule then div [ attr "class" "text-center text-gray-500 italic py-20" ] I18n.pt.noCleaningWindows
+                else Array.foldMap (\(apartment /\ windows) -> apartmentSection apartment windows)
+                  (Map.toUnfoldable schedule :: Array _)
+            )
         )
 
 apartmentPage :: Apartment -> Array CleaningWindow -> HtmlString
@@ -251,9 +256,9 @@ apartmentPage apartment@(Apartment name) windows =
     head (I18n.pt.apartmentSchedule name) <>
       body
         ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
-          ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] (I18n.pt.apartmentSchedule name) <>
-              apartmentSection apartment windows
-          )
+            ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] (I18n.pt.apartmentSchedule name) <>
+                apartmentSection apartment windows
+            )
         )
 
 indexPage :: HtmlString
@@ -262,14 +267,14 @@ indexPage =
     head "Airbnbeast - Home" <>
       body
         ( div [ attr "class" "max-w-4xl mx-auto p-6" ]
-          ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] "🏠 Airbnbeast" <>
-              div [ attr "class" "bg-white rounded-lg p-6 shadow-sm border border-gray-200" ]
-                ( h2 [ attr "class" "text-2xl font-semibold text-gray-800 mb-4" ] "Available Pages" <>
-                    tag "ul" [ attr "class" "space-y-3" ]
-                      ( tag "li" [] (tag "a" [ attr "href" "/schedule", attr "class" "block p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 text-blue-700 hover:text-blue-800 font-medium transition-colors" ] "📋 Full Cleaning Schedule")
-                          <> tag "li" [] (tag "a" [ attr "href" "/apartment/gloria", attr "class" "block p-4 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 text-green-700 hover:text-green-800 font-medium transition-colors" ] "🏠 Glória Apartment")
-                          <> tag "li" [] (tag "a" [ attr "href" "/apartment/santa", attr "class" "block p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 text-purple-700 hover:text-purple-800 font-medium transition-colors" ] "🏠 Santa Apartment")
-                      )
-                )
-          )
+            ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] "🏠 Airbnbeast" <>
+                div [ attr "class" "bg-white rounded-lg p-6 shadow-sm border border-gray-200" ]
+                  ( h2 [ attr "class" "text-2xl font-semibold text-gray-800 mb-4" ] "Available Pages" <>
+                      tag "ul" [ attr "class" "space-y-3" ]
+                        ( tag "li" [] (tag "a" [ attr "href" "/schedule", attr "class" "block p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 text-blue-700 hover:text-blue-800 font-medium transition-colors" ] "📋 Full Cleaning Schedule")
+                            <> tag "li" [] (tag "a" [ attr "href" "/apartment/gloria", attr "class" "block p-4 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 text-green-700 hover:text-green-800 font-medium transition-colors" ] "🏠 Glória Apartment")
+                            <> tag "li" [] (tag "a" [ attr "href" "/apartment/santa", attr "class" "block p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 text-purple-700 hover:text-purple-800 font-medium transition-colors" ] "🏠 Santa Apartment")
+                        )
+                  )
+            )
         )

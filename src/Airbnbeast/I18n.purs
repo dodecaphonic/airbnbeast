@@ -44,8 +44,14 @@ pt =
   , partialWeekend: "Fim de Semana Parcial"
   , weekdayOnly: "Apenas Dias Úteis"
   , weekdays:
-    [ "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"
-    ]
+      [ "Dom"
+      , "Seg"
+      , "Ter"
+      , "Qua"
+      , "Qui"
+      , "Sex"
+      , "Sáb"
+      ]
   , adjustPeriods: "⚙️ Ajustar Períodos"
   , hidePeriods: "⚙️ Ocultar Períodos"
   , clickToToggle: "Clique para bloquear/desbloquear períodos:"
@@ -68,10 +74,10 @@ formatDatePt dt =
       Thursday -> 4
       Friday -> 5
       Saturday -> 6
-    
+
     dayStr = if day < 10 then "0" <> show day else show day
     monthStr = if month < 10 then "0" <> show month else show month
-    
+
     weekdayName = case Array.index pt.weekdays weekdayIndex of
       Just name -> name
       Nothing -> show weekdayIndex

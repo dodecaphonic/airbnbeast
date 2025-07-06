@@ -209,14 +209,14 @@ cleaningWindowToTimeBlocks (CleaningWindow { from, to, stay }) =
     let
       startDate = DateTime.date from
       endDate = DateTime.date to
-      
+
       morningBlock = TimeBlock
         { date
         , timeOfDay: Morning
         , available: true -- Default to available, manual overrides will set to false
         , apartment: apt
         }
-      
+
       afternoonBlock = TimeBlock
         { date
         , timeOfDay: Afternoon
@@ -226,16 +226,16 @@ cleaningWindowToTimeBlocks (CleaningWindow { from, to, stay }) =
     in
       if date == startDate && date == endDate then
         -- Single day window: include both morning and afternoon if within time range
-        [morningBlock, afternoonBlock]
+        [ morningBlock, afternoonBlock ]
       else if date == startDate then
         -- First day: start from afternoon (13:00)
-        [afternoonBlock]
+        [ afternoonBlock ]
       else if date == endDate then
         -- Last day: only morning (until 13:00)
-        [morningBlock]
+        [ morningBlock ]
       else
         -- Middle days: both morning and afternoon
-        [morningBlock, afternoonBlock]
+        [ morningBlock, afternoonBlock ]
 
 -- Convert consecutive available TimeBlocks back to a readable date range
 timeBlocksToDateRange :: Array TimeBlock -> Maybe { from :: DateTime, to :: DateTime }
@@ -252,7 +252,7 @@ timeBlocksToDateRange blocks =
               startTime = case firstBlock.timeOfDay of
                 Morning -> createTime 8 0 0 0 -- 8:00 AM
                 Afternoon -> createTime 13 0 0 0 -- 1:00 PM
-              
+
               endTime = case lastBlock.timeOfDay of
                 Morning -> createTime 13 0 0 0 -- 1:00 PM
                 Afternoon -> createTime 18 0 0 0 -- 6:00 PM
@@ -272,6 +272,6 @@ timeBlocksToDateRange blocks =
     case compare a.date b.date of
       EQ -> compare a.timeOfDay b.timeOfDay
       other -> other
-  
+
   createTime :: Int -> Int -> Int -> Int -> Maybe Time
   createTime h m s ms = Time <$> toEnum h <*> toEnum m <*> toEnum s <*> toEnum ms
