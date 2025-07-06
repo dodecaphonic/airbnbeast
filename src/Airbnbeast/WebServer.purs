@@ -18,6 +18,7 @@ import HTTPure.Method (Method(..))
 import HTTPure.Body (toString)
 import Data.String as String
 import Data.Array as Array
+import Data.Array.NonEmpty as NEArray
 import Data.Int as Int
 import Data.Date (Date)
 import Data.Date as Date
@@ -67,6 +68,19 @@ parseTimeOfDay :: String -> Maybe TimeOfDay
 parseTimeOfDay "Morning" = Just Morning
 parseTimeOfDay "Afternoon" = Just Afternoon
 parseTimeOfDay _ = Nothing
+
+-- Find a cleaning window that contains the specified TimeBlock
+findCleaningWindowByTimeBlock :: TimeBlock -> Map.Map Apartment (Array Cleaning.CleaningWindow) -> Maybe Cleaning.CleaningWindow
+findCleaningWindowByTimeBlock (TimeBlock { apartment, date, timeOfDay }) schedule = do
+  windows <- Map.lookup apartment schedule
+  Array.find (windowContainsTimeBlock date timeOfDay) windows
+  where
+  windowContainsTimeBlock :: Date -> TimeOfDay -> Cleaning.CleaningWindow -> Boolean
+  windowContainsTimeBlock targetDate targetTimeOfDay (Cleaning.CleaningWindow { timeBlocks }) =
+    let
+      timeBlocksArray = NEArray.toArray timeBlocks
+    in
+      Array.any (\(Cleaning.TimeBlock tb) -> tb.date == targetDate && tb.timeOfDay == targetTimeOfDay) timeBlocksArray
 
 createTimeBlock :: Apartment -> Date -> TimeOfDay -> Boolean -> TimeBlock
 createTimeBlock apartment date timeOfDay available =
@@ -121,9 +135,16 @@ routes storage { method: Patch, path: [ "timeblocks", "enable" ], body } = do
     Just { apartment, date, timeOfDay } -> do
       let timeBlock = createTimeBlock apartment date timeOfDay true
       _ <- attempt $ storage.enableTimeBlock timeBlock
-      found' (header "Location" "/") "/"
+      
+      -- Return the updated frame content instead of redirecting
+      schedule <- fetchCleaningSchedule storage
+      case findCleaningWindowByTimeBlock timeBlock schedule of
+        Just window -> 
+          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard false window)
+        Nothing ->
+          notFound
     Nothing ->
-      found' (header "Location" "/") "/"
+      notFound
 
 routes storage { method: Patch, path: [ "timeblocks", "disable" ], body } = do
   liftEffect $ log "Disabling time block"
@@ -132,9 +153,16 @@ routes storage { method: Patch, path: [ "timeblocks", "disable" ], body } = do
     Just { apartment, date, timeOfDay } -> do
       let timeBlock = createTimeBlock apartment date timeOfDay false
       _ <- attempt $ storage.disableTimeBlock timeBlock
-      found' (header "Location" "/") "/"
+      
+      -- Return the updated frame content instead of redirecting
+      schedule <- fetchCleaningSchedule storage
+      case findCleaningWindowByTimeBlock timeBlock schedule of
+        Just window -> 
+          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard false window)
+        Nothing ->
+          notFound
     Nothing ->
-      found' (header "Location" "/") "/"
+      notFound
 
 routes _ _ = do
   liftEffect $ log "404 - Page not found"

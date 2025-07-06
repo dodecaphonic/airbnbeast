@@ -41,6 +41,7 @@ head :: String -> HtmlString
 head title = tag "head" [] $
   tag "meta" [ attr "charset" "utf-8" ] ""
     <> tag "meta" [ attr "name" "viewport", attr "content" "width=device-width, initial-scale=1" ] ""
+    <> tag "meta" [ attr "name" "turbo-cache-control", attr "content" "no-cache" ] ""
     <> tag "title" [] title
     <> tag "link" [ attr "rel" "stylesheet", attr "href" "/tailwind.css" ] ""
     <> tag "script" [ attr "src" "/application.js" ] ""
@@ -71,6 +72,9 @@ div attrs content = tag "div" attrs content
 
 span :: Array String -> HtmlString -> HtmlString
 span attrs content = tag "span" attrs content
+
+turboFrame :: String -> HtmlString -> HtmlString
+turboFrame frameId content = tag "turbo-frame" [ attr "id" frameId ] content
 
 formatDate :: DateTime.DateTime -> HtmlString
 formatDate = I18n.formatDatePt
@@ -216,6 +220,9 @@ calculateEffectiveDateRange timeBlocks originalFrom originalTo =
 cleaningWindowCard :: Boolean -> CleaningWindow -> HtmlString
 cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay, timeBlocks }) =
   let
+    -- Generate unique frame ID based on apartment and stay details
+    frameId = "cleaning-window-" <> apartmentToUrl stay.apartment <> "-" <> stay.last4Digits
+
     cardClasses =
       if isFirst then "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
       else "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
@@ -258,8 +265,8 @@ cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay, timeBlocks }
             else ""
       Nothing ->
         div [ attr "class" dateClasses ] (formatDate from <> " → " <> formatDate to)
-  in
-    div
+
+    cardContent = div
       [ attr "class" cardClasses
       , attr "data-controller" "cleaning-window"
       , attr "data-cleaning-window-adjust-text-value" I18n.pt.adjustPeriods
@@ -278,6 +285,8 @@ cleaningWindowCard isFirst window@(CleaningWindow { from, to, stay, timeBlocks }
           )
         <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ]
           (renderTimeBlockGrid window)
+  in
+    turboFrame frameId cardContent
 
 apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
 apartmentSection apartment@(Apartment name) windows =
