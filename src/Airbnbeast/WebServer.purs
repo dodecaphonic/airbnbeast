@@ -21,6 +21,7 @@ import Data.Array as Array
 import Data.Int as Int
 import Data.Date (Date)
 import Data.Date as Date
+import Data.Traversable (traverse)
 import Data.Enum (toEnum, fromEnum)
 import Airbnbeast.Cleaning (TimeOfDay(..), TimeBlock(..))
 import Node.Encoding (Encoding(..))
@@ -79,12 +80,12 @@ createTimeBlock apartment date timeOfDay available =
 routes :: Storage -> Routes
 routes storage { method: Get, path: [] } = do
   liftEffect $ log "Serving full cleaning schedule"
-  schedule <- fetchCleaningSchedule
+  schedule <- fetchCleaningSchedule storage
   ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage schedule)
 
 routes storage { method: Get, path: [ "apartment", apartmentName ] } = do
   liftEffect $ log $ "Serving apartment page for: " <> apartmentName
-  schedule <- fetchCleaningSchedule
+  schedule <- fetchCleaningSchedule storage
   case normalizeApartmentName apartmentName of
     Just apartment ->
       case Map.lookup apartment schedule of
@@ -139,8 +140,8 @@ routes _ _ = do
   liftEffect $ log "404 - Page not found"
   notFound
 
-fetchCleaningSchedule :: Aff (Map.Map Apartment (Array Cleaning.CleaningWindow))
-fetchCleaningSchedule = do
+fetchCleaningSchedule :: Storage -> Aff (Map.Map Apartment (Array Cleaning.CleaningWindow))
+fetchCleaningSchedule storage = do
   let
     gloria =
       { apartment: Apartment "Glória"
@@ -153,7 +154,37 @@ fetchCleaningSchedule = do
 
   currentDate <- liftEffect nowDate
   guestStays <- fetchGuestStays [ gloria, santa ]
-  pure $ Cleaning.scheduleFromGuestStaysWithDate currentDate guestStays
+  let baseSchedule = Cleaning.scheduleFromGuestStaysWithDate currentDate guestStays
+  
+  -- Update each CleaningWindow with disabled TimeBlocks from storage
+  traverse (traverse (updateCleaningWindow storage)) baseSchedule
+  where
+  
+  updateCleaningWindow :: Storage -> Cleaning.CleaningWindow -> Aff Cleaning.CleaningWindow
+  updateCleaningWindow st window = do
+    disabledBlocks <- st.disabledTimeBlocksDuringStay window
+    liftEffect $ log $ "Disabled blocks found: " <> show (Array.length disabledBlocks)
+    liftEffect $ log $ "Disabled blocks: " <> show disabledBlocks
+    pure $ mergeDisabledTimeBlocks window disabledBlocks
+  
+  mergeDisabledTimeBlocks :: Cleaning.CleaningWindow -> Array Cleaning.TimeBlock -> Cleaning.CleaningWindow
+  mergeDisabledTimeBlocks (Cleaning.CleaningWindow record) disabledBlocks =
+    let
+      updatedTimeBlocks = map (updateTimeBlockAvailability disabledBlocks) record.timeBlocks
+    in
+      Cleaning.CleaningWindow record { timeBlocks = updatedTimeBlocks }
+  
+  updateTimeBlockAvailability :: Array Cleaning.TimeBlock -> Cleaning.TimeBlock -> Cleaning.TimeBlock
+  updateTimeBlockAvailability disabledBlocks timeBlock@(Cleaning.TimeBlock tb) =
+    let
+      isDisabled = Array.any (timeBlockMatches timeBlock) disabledBlocks
+      newAvailable = if isDisabled then false else tb.available
+    in
+      Cleaning.TimeBlock tb { available = newAvailable }
+  
+  timeBlockMatches :: Cleaning.TimeBlock -> Cleaning.TimeBlock -> Boolean
+  timeBlockMatches (Cleaning.TimeBlock a) (Cleaning.TimeBlock b) =
+    a.date == b.date && a.timeOfDay == b.timeOfDay && a.apartment == b.apartment
 
 startServer :: { storage :: Storage, port :: Int } -> ServerM
 startServer { port, storage } = do
