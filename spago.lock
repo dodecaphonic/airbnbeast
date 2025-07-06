@@ -7,6 +7,8 @@
           "dependencies": [
             "aff",
             "aff-promise",
+            "argonaut-codecs",
+            "argonaut-core",
             "arrays",
             "console",
             "datetime",
@@ -43,6 +45,8 @@
             "aff",
             "aff-promise",
             "ansi",
+            "argonaut-codecs",
+            "argonaut-core",
             "arraybuffer-types",
             "arrays",
             "avar",
@@ -5227,6 +5231,42 @@
         "foldable-traversable",
         "lists",
         "strings"
+      ]
+    },
+    "argonaut-codecs": {
+      "type": "git",
+      "url": "https://github.com/purescript-contrib/purescript-argonaut-codecs.git",
+      "rev": "f8fdc1e34142fa84e66022ea5d417a008d709146",
+      "dependencies": [
+        "argonaut-core",
+        "arrays",
+        "effect",
+        "foreign-object",
+        "identity",
+        "integers",
+        "maybe",
+        "nonempty",
+        "ordered-collections",
+        "prelude",
+        "record"
+      ]
+    },
+    "argonaut-core": {
+      "type": "git",
+      "url": "https://github.com/purescript-contrib/purescript-argonaut-core.git",
+      "rev": "68da81dd80ec36d3b013eff46dc067a972c22e5d",
+      "dependencies": [
+        "arrays",
+        "control",
+        "either",
+        "foreign-object",
+        "functions",
+        "gen",
+        "maybe",
+        "nonempty",
+        "prelude",
+        "strings",
+        "tailrec"
       ]
     },
     "arraybuffer-types": {
