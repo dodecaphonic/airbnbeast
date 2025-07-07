@@ -2,7 +2,6 @@ module Airbnbeast.Auth where
 
 import Prelude
 
-import Data.Maybe (Maybe(..))
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 

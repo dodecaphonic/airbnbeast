@@ -1,7 +1,5 @@
 module Node.Bcrypt where
 
-import Prelude
-
 foreign import hashPasswordImpl :: String -> String
 foreign import comparePasswordImpl :: String -> String -> Boolean
 
