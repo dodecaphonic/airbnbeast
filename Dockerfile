@@ -64,6 +64,9 @@ COPY --from=builder /app/dist ./dist
 # Copy database migrations
 COPY db/ ./db/
 
+# Copy startup script
+COPY entrypoints/ ./entrypoints/
+
 # Create directories for data and logs
 RUN mkdir -p /app/data /app/logs && \
     chown -R purescript:nodejs /app
@@ -88,5 +91,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
-# Start the application
-CMD ["node", "-e", "require('./output/Main/index.js').main()"]
+# Start the application with migrations
+CMD ["./entrypoints/docker-entrypoint.sh"]
