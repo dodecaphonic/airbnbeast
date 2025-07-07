@@ -27,3 +27,12 @@ volumes:
 
 boot:
   limit: 10 # seconds
+
+proxy:
+  ssl: true
+  host: airbnb.braunecapela.com
+  app_port: 8080
+  healthcheck:
+    path: /login
+    interval: 7
+    timeout: 49
