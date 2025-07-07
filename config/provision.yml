@@ -1,0 +1,22 @@
+# Kamal 2 provisioning configuration
+# This file sets up the server environment before deployment
+
+---
+- name: Setup persistent storage directory
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create /data/airbnbeast directory
+      file:
+        path: /data/airbnbeast
+        state: directory
+        owner: 1001  # purescript user UID from Dockerfile
+        group: 1001  # nodejs group GID from Dockerfile
+        mode: '0755'
+
+    - name: Ensure proper permissions on data directory
+      file:
+        path: /data/airbnbeast
+        owner: 1001
+        group: 1001
+        recurse: yes

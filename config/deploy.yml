@@ -1,0 +1,29 @@
+service: airbnbeast
+image: troikatech/airbnbeast
+
+servers:
+  web:
+    hosts:
+      - 143.244.182.119
+
+builder:
+  arch: amd64
+
+registry:
+  server: registry.digitalocean.com
+  username:
+    - DOCKER_REGISTRY_USERNAME
+  password:
+    - DOCKER_REGISTRY_TOKEN
+
+env:
+  clear:
+    PORT: 8080
+    NODE_ENV: production
+    DATABASE_PATH: /data/airbnbeast/airbnbeast.sqlite3
+
+volumes:
+  - "/data/airbnbeast:/data/airbnbeast"
+
+boot:
+  limit: 10 # seconds
