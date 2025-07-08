@@ -10,7 +10,7 @@ import Airbnbeast.Html as Html
 import Airbnbeast.I18n as I18n
 import Airbnbeast.Session (defaultSessionConfig, createSession, validateSession, createSessionCookie, parseSessionFromCookie)
 import Airbnbeast.Storage (Storage)
-import Control.Monad.Reader (ReaderT, runReaderT, asks)
+import Control.Monad.Reader (ReaderT, asks, lift, runReaderT)
 import Data.Array as Array
 import Data.Array.NonEmpty as NEArray
 import Data.Date (Date)
@@ -28,7 +28,7 @@ import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Now (nowDate)
 import Foreign.Object as Object
-import HTTPure (Request, ResponseM, ServerM, Response, header, notFound, ok', serve, found')
+import HTTPure (Request, ResponseM, ServerM, Response, found', header, notFound, ok', serve)
 import HTTPure.Body (toString)
 import HTTPure.Method (Method(..))
 import Node.Encoding (Encoding(..))
@@ -39,6 +39,7 @@ type Routes = Request -> ResponseM
 -- | Application context containing current user and storage
 type Context =
   { currentUser :: Maybe User
+  , request :: Request
   , storage :: Storage
   }
 
@@ -46,14 +47,14 @@ type Context =
 type AppM = ReaderT Context Aff
 
 -- | New context-aware route handler type
-type RouteHandler = Request -> AppM Response
+type RouteHandler = AppM Response
 
 -- | Convert an AppM computation to a ResponseM for HTTPure compatibility
 runRoute :: Storage -> Request -> AppM Response -> ResponseM
 runRoute storage request appAction = do
   let
     currentUser = getSessionFromRequest request >>= \session -> Just session.user
-    context = { currentUser, storage }
+    context = { currentUser, request, storage }
   runReaderT appAction context
 
 -- | Helper to get the current user from context
@@ -67,14 +68,6 @@ getStorage = asks _.storage
 -- | Helper to create a redirect response to login
 redirectToLogin :: AppM Response
 redirectToLogin = liftAff $ found' (header "Location" "/login") "/login"
-
--- | Helper that runs an action if authenticated, otherwise redirects to login
-requireAuthR :: (User -> AppM Response) -> AppM Response
-requireAuthR action = do
-  maybeUser <- getCurrentUser
-  case maybeUser of
-    Just user -> action user
-    Nothing -> redirectToLogin
 
 -- Secure session management with HMAC signatures
 getSessionFromRequest :: Request -> Maybe Session
@@ -109,15 +102,20 @@ extractCookieHeader headersStr = do
       Just value -> Just $ String.trim value
       Nothing -> Nothing
 
-requireAuth :: Request -> ResponseM -> ResponseM
-requireAuth request action =
-  case getSessionFromRequest request of
-    Just _ -> do
-      liftEffect $ log "✅ Authentication successful"
-      action
-    Nothing -> do
-      liftEffect $ log "❌ Authentication failed - redirecting to login"
-      found' (header "Location" "/login") "/login"
+requireAuthR :: (User -> AppM Response) -> AppM Response
+requireAuthR action = do
+  maybeUser <- getCurrentUser
+  case maybeUser of
+    Just user -> action user
+    Nothing -> redirectToLogin
+
+-- | Helper that runs an action if authenticated, otherwise redirects to login
+requireAuth :: (User -> AppM Response) -> AppM Response
+requireAuth action = do
+  maybeUser <- getCurrentUser
+  case maybeUser of
+    Just user -> action user
+    Nothing -> redirectToLogin
 
 parseLoginForm :: String -> Maybe { username :: String, password :: String }
 parseLoginForm formData = do
@@ -185,15 +183,16 @@ createTimeBlock apartment date timeOfDay available =
 
 -- | ReaderT-based home handler
 homeHandler :: RouteHandler
-homeHandler _ = requireAuthR \user -> do
+homeHandler = requireAuthR \user -> do
   liftEffect $ log $ "🏠 Serving full cleaning schedule for user: " <> show user.username
   storage <- getStorage
   schedule <- liftAff $ fetchCleaningSchedule storage
   liftAff $ ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage schedule)
 
 -- | ReaderT-based login handler
-loginHandler :: Object.Object String -> RouteHandler
-loginHandler query _ = do
+loginHandler :: RouteHandler
+loginHandler = do
+  query <- asks _.request.query
   liftEffect $ log "📝 Serving login page"
   let
     errorMsg = case Object.lookup "error" query of
@@ -203,21 +202,21 @@ loginHandler query _ = do
       _ -> Nothing
   liftAff $ ok' (header "Content-Type" "text/html") (Html.loginPage errorMsg)
 
-routes :: Storage -> Routes
--- Login routes (migrated to ReaderT)
-routes storage request@{ method: Get, path: [ "login" ], query } = runRoute storage request (loginHandler query request)
+loginAttemptHandler :: RouteHandler
+loginAttemptHandler = do
+  { body } <- asks _.request
+  storage <- getStorage
 
-routes storage { method: Post, path: [ "auth", "login" ], body } = do
   liftEffect $ log "Processing login"
-  bodyText <- toString body
+  bodyText <- liftAff $ toString body
   case parseLoginForm bodyText of
     Just { username, password } -> do
-      authResult <- storage.authenticateUser username password
+      authResult <- lift $ storage.authenticateUser username password
       case authResult of
         Right user -> do
           liftEffect $ log $ "User authenticated: " <> show user.username
           -- Create secure session token
-          sessionToken <- createSession defaultSessionConfig user
+          sessionToken <- lift $ createSession defaultSessionConfig user
           liftEffect $ log $ "🔑 Created session token: " <> String.take 20 sessionToken <> "..."
           liftEffect $ log $ "🍪 Setting cookie: " <> createSessionCookie sessionToken
           found'
@@ -233,18 +232,19 @@ routes storage { method: Post, path: [ "auth", "login" ], body } = do
     Nothing ->
       found' (header "Location" "/login?error=invalid_data") "/login?error=invalid_data"
 
-routes _ { method: Post, path: [ "auth", "logout" ] } = do
+logoutHandler :: RouteHandler
+logoutHandler = do
   liftEffect $ log "Processing logout"
   found'
     (header "Set-Cookie" "_airbnbeast_session=; Path=/; HttpOnly; Expires=Thu, 01 Jan 1970 00:00:00 GMT" <> header "Location" "/login")
     "/login"
 
--- Protected routes (migrated to ReaderT)
-routes storage request@{ method: Get, path: [] } = runRoute storage request (homeHandler request)
-
-routes storage request@{ method: Get, path: [ "apartment", apartmentName ] } = requireAuth request do
+apartmentHandler :: String -> RouteHandler
+apartmentHandler apartmentName = do
   liftEffect $ log $ "Serving apartment page for: " <> apartmentName
-  schedule <- fetchCleaningSchedule storage
+  storage <- getStorage
+  schedule <- lift $ fetchCleaningSchedule storage
+
   case normalizeApartmentName apartmentName of
     Just apartment ->
       case Map.lookup apartment schedule of
@@ -254,6 +254,63 @@ routes storage request@{ method: Get, path: [ "apartment", apartmentName ] } = r
           notFound
     Nothing ->
       notFound
+
+type TimeBlockIdentifier =
+  { apartmentName :: String
+  , dateStr :: String
+  , timeOfDayStr :: String
+  }
+
+createTimeBlockHandler :: TimeBlockIdentifier -> AppM Response
+createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuthR \_ -> do
+  liftEffect $ log $ "Enabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
+  case parsePathParameters apartmentName dateStr timeOfDayStr of
+    Just { apartment, date, timeOfDay } -> do
+      storage <- getStorage
+      let timeBlock = createTimeBlock apartment date timeOfDay true
+      _ <- lift $ attempt $ storage.enableTimeBlock timeBlock
+
+      -- Return the updated frame content
+      schedule <- lift $ fetchCleaningSchedule storage
+      case findCleaningWindowByTimeBlock timeBlock schedule of
+        Just window ->
+          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
+        Nothing ->
+          notFound
+    Nothing ->
+      notFound
+
+removeTimeBlockHandler :: TimeBlockIdentifier -> AppM Response
+removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuthR \_ -> do
+  liftEffect $ log $ "Disabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
+  case parsePathParameters apartmentName dateStr timeOfDayStr of
+    Just { apartment, date, timeOfDay } -> do
+      let timeBlock = createTimeBlock apartment date timeOfDay false
+      storage <- getStorage
+      _ <- lift $ attempt $ storage.disableTimeBlock timeBlock
+
+      -- Return the updated frame content
+      schedule <- lift $ fetchCleaningSchedule storage
+      case findCleaningWindowByTimeBlock timeBlock schedule of
+        Just window ->
+          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
+        Nothing ->
+          notFound
+    Nothing ->
+      notFound
+
+routes :: Storage -> Routes
+-- Login routes (migrated to ReaderT)
+routes storage request@{ method: Get, path: [ "login" ] } = runRoute storage request loginHandler
+
+routes storage request@{ method: Post, path: [ "auth", "login" ] } = runRoute storage request loginAttemptHandler
+
+routes storage request@{ method: Post, path: [ "auth", "logout" ] } = runRoute storage request logoutHandler
+
+-- Protected routes (migrated to ReaderT)
+routes storage request@{ method: Get, path: [] } = runRoute storage request homeHandler
+
+routes storage request@{ method: Get, path: [ "apartment", apartmentName ] } = runRoute storage request (apartmentHandler apartmentName)
 
 routes _ { method: Get, path: [ "tailwind.css" ] } = do
   liftEffect $ log "Serving Tailwind CSS"
@@ -273,39 +330,11 @@ routes _ { method: Get, path: [ "application.js" ] } = do
     Left _ ->
       notFound
 
-routes storage request@{ method: Post, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } = requireAuth request do
-  liftEffect $ log $ "Enabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
-  case parsePathParameters apartmentName dateStr timeOfDayStr of
-    Just { apartment, date, timeOfDay } -> do
-      let timeBlock = createTimeBlock apartment date timeOfDay true
-      _ <- attempt $ storage.enableTimeBlock timeBlock
+routes storage request@{ method: Post, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } =
+  runRoute storage request (createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr })
 
-      -- Return the updated frame content
-      schedule <- fetchCleaningSchedule storage
-      case findCleaningWindowByTimeBlock timeBlock schedule of
-        Just window ->
-          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
-        Nothing ->
-          notFound
-    Nothing ->
-      notFound
-
-routes storage request@{ method: Delete, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } = requireAuth request do
-  liftEffect $ log $ "Disabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
-  case parsePathParameters apartmentName dateStr timeOfDayStr of
-    Just { apartment, date, timeOfDay } -> do
-      let timeBlock = createTimeBlock apartment date timeOfDay false
-      _ <- attempt $ storage.disableTimeBlock timeBlock
-
-      -- Return the updated frame content
-      schedule <- fetchCleaningSchedule storage
-      case findCleaningWindowByTimeBlock timeBlock schedule of
-        Just window ->
-          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
-        Nothing ->
-          notFound
-    Nothing ->
-      notFound
+routes storage request@{ method: Delete, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } =
+  runRoute storage request (removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr })
 
 routes _ _ = do
   liftEffect $ log "404 - Page not found"
