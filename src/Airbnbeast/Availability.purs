@@ -16,7 +16,10 @@ import Data.List.NonEmpty as NEL
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Maybe as Maybe
 import Data.Newtype (unwrap)
+import Data.String (Pattern(..))
+import Data.String as String
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
@@ -41,6 +44,7 @@ type GuestStay =
   , fromDate :: Date
   , toDate :: Date
   , link :: String
+  , id :: String
   }
 
 type DailyOccupancy =
@@ -81,6 +85,7 @@ airbnbDatesToGuestStays = foldl dateAsGuestStay Map.empty
           , toDate: r.to
           , last4Digits: r.last4Digits
           , link: r.link
+          , id: idFromLink r.link
           }
       in
         Map.alter
@@ -91,6 +96,8 @@ airbnbDatesToGuestStays = foldl dateAsGuestStay Map.empty
           apartment
           gss
     Parser.Unavailability _ -> gss
+
+  idFromLink link = Maybe.fromMaybe "-" $ Array.last (String.split (Pattern "/") link)
 
 airbnbDatesToDailyOccupancy :: Array AirbnbDatesWithApartment -> Array DailyOccupancy
 airbnbDatesToDailyOccupancy dates = datesAsDailyOccupancy

@@ -35,7 +35,8 @@ instance Show CleaningWeekend where
   show = genericShow
 
 newtype CleaningWindow = CleaningWindow
-  { from :: DateTime
+  { id :: String
+  , from :: DateTime
   , to :: DateTime
   , weekend :: CleaningWeekend
   , stay :: GuestStay
@@ -159,6 +160,7 @@ scheduleFromGuestStays =
         , weekend
         , stay
         , timeBlocks: nonEmptyTimeBlocks
+        , id: stay.id
         }
       Nothing -> Nothing -- This shouldn't happen if the window is valid
 

@@ -184,6 +184,7 @@ cleaningSpecs = do
             , fromDate
             , toDate
             , link
+            , id: "-"
             }
 
         mkDate y m d = DT.canonicalDate <$> toEnum y <*> toEnum m <*> toEnum d
@@ -209,6 +210,7 @@ cleaningSpecs = do
               , from: fromDate
               , to: toDate
               , weekend: PartialWeekend
+              , id: "-"
               }
 
           (_.weekend <<< unwrap <$> firstWindow) `shouldEqual` Just expectedWindow.weekend
@@ -257,7 +259,7 @@ cleaningSpecs = do
           (((\(CleaningWindow { from, to }) -> { from, to }) <$> secondWindow)) `shouldEqual` Just expectedSecondWindow
 
         it "preserves windows that are already 5 days or shorter" do
-          -- Create a scenario with a 3-day gap between stays  
+          -- Create a scenario with a 3-day gap between stays
           firstStay <- mkGuestStay (mkDate 2022 10 1) (mkDate 2022 10 3)
           secondStay <- mkGuestStay (mkDate 2022 10 7) (mkDate 2022 10 10) -- 3-day gap from Oct 3 to Oct 7
 
@@ -296,7 +298,7 @@ cleaningSpecs = do
             pure { from: fromDate, to: toDate }
 
           (((\(CleaningWindow { from, to }) -> { from, to }) <$> secondWindow)) `shouldEqual` Just expectedSecondWindow
-        
+
         it "first window is always small (just one day before stay)" do
           -- First window algorithm is different - it's always just one day before the stay
           firstStay <- mkGuestStay (mkDate 2022 10 15) (mkDate 2022 10 18)
