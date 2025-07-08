@@ -20,6 +20,7 @@ import Data.Maybe as Maybe
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Time.Duration (Days(..))
+import Data.Int (floor, toNumber)
 import Data.Tuple.Nested ((/\))
 
 data CleaningWeekend
@@ -141,11 +142,14 @@ scheduleFromGuestStays =
 
   windowBetween :: GuestStay -> Date -> Date -> Maybe CleaningWindow
   windowBetween stay startDate endDate = do
-    cleaningStart <- atCleaningStart startDate
+    let
+      limitedStartDate = startAtMostDaysBefore 5 startDate endDate
+
+    cleaningStart <- atCleaningStart limitedStartDate
     cleaningEnd <- atCleaningEnd endDate
 
     let
-      weekend = weekendCoverage startDate endDate
+      weekend = weekendCoverage limitedStartDate endDate
       timeBlocks = cleaningWindowToTimeBlocks cleaningStart cleaningEnd stay
 
     case NEArray.fromArray timeBlocks of
@@ -157,6 +161,18 @@ scheduleFromGuestStays =
         , timeBlocks: nonEmptyTimeBlocks
         }
       Nothing -> Nothing -- This shouldn't happen if the window is valid
+
+  startAtMostDaysBefore :: Int -> Date -> Date -> Date
+  startAtMostDaysBefore maxDays startDate endDate =
+    let
+      durationDays = Date.diff endDate startDate :: Days
+      actualDays = floor (unwrap durationDays) + 1 -- +1 because diff is exclusive, so we count both start and end dates
+    in
+      if actualDays <= maxDays then startDate
+      else
+        -- If we have more than maxDays, move the start date forward
+        -- so that there are exactly maxDays between start and end (inclusive)
+        Maybe.fromMaybe startDate $ Date.adjust (Days (toNumber (actualDays - maxDays))) startDate
 
   atCleaningStart :: Date -> Maybe DateTime
   atCleaningStart refDate = do

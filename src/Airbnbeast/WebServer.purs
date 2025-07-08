@@ -21,7 +21,7 @@ import Data.Int as Int
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String as String
-import Data.Traversable (sequence, traverse)
+import Data.Traversable (traverse)
 import Effect.Aff (Aff, attempt)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)

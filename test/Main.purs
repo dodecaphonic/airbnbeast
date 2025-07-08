@@ -233,3 +233,85 @@ cleaningSpecs = do
 
           (Array.length <$> apartmentSchedule) `shouldEqual` Just (Array.length expectedWindows)
           ((map (\(CleaningWindow { from, to }) -> [ from, to ])) <$> apartmentSchedule) `shouldEqual` Just expectedWindows
+
+      describe "five-day limit functionality" do
+        it "limits cleaning windows to at most 5 days" do
+          -- Create a scenario with a 10-day gap between stays
+          firstStay <- mkGuestStay (mkDate 2022 10 1) (mkDate 2022 10 3)
+          secondStay <- mkGuestStay (mkDate 2022 10 15) (mkDate 2022 10 18) -- 10-day gap from Oct 3 to Oct 15
+
+          let
+            apartmentStays = Map.fromFoldable [ apartment /\ [ firstStay, secondStay ] ]
+            cleaningSchedule = Cleaning.scheduleFromGuestStays apartmentStays
+            apartmentSchedule = Map.lookup apartment cleaningSchedule
+            secondWindow = (Array.index <$> apartmentSchedule <*> pure 1) >>= identity
+
+          -- The second window should be limited to 5 days, ending at Oct 15
+          -- So it should start on Oct 11 (5 days before Oct 15)
+          expectedSecondWindow <- Maybe.maybe (throwError (error "Could not build expected CleaningWindow")) pure $ do
+            fromDate <- mkCleaningDate 2022 10 11 -- 5 days before Oct 15
+            toDate <- mkCleaningDate 2022 10 15
+
+            pure { from: fromDate, to: toDate }
+
+          (((\(CleaningWindow { from, to }) -> { from, to }) <$> secondWindow)) `shouldEqual` Just expectedSecondWindow
+
+        it "preserves windows that are already 5 days or shorter" do
+          -- Create a scenario with a 3-day gap between stays  
+          firstStay <- mkGuestStay (mkDate 2022 10 1) (mkDate 2022 10 3)
+          secondStay <- mkGuestStay (mkDate 2022 10 7) (mkDate 2022 10 10) -- 3-day gap from Oct 3 to Oct 7
+
+          let
+            apartmentStays = Map.fromFoldable [ apartment /\ [ firstStay, secondStay ] ]
+            cleaningSchedule = Cleaning.scheduleFromGuestStays apartmentStays
+            apartmentSchedule = Map.lookup apartment cleaningSchedule
+            secondWindow = (Array.index <$> apartmentSchedule <*> pure 1) >>= identity
+
+          -- The second window should use the full gap since it's only 3 days
+          expectedSecondWindow <- Maybe.maybe (throwError (error "Could not build expected CleaningWindow")) pure $ do
+            fromDate <- mkCleaningDate 2022 10 3
+            toDate <- mkCleaningDate 2022 10 7
+
+            pure { from: fromDate, to: toDate }
+
+          (((\(CleaningWindow { from, to }) -> { from, to }) <$> secondWindow)) `shouldEqual` Just expectedSecondWindow
+
+        it "handles exactly 5-day windows correctly" do
+          -- Create a scenario with exactly a 5-day gap between stays
+          firstStay <- mkGuestStay (mkDate 2022 10 1) (mkDate 2022 10 3)
+          secondStay <- mkGuestStay (mkDate 2022 10 8) (mkDate 2022 10 12) -- 5-day gap from Oct 3 to Oct 8 (Oct 3,4,5,6,7,8 = 6 days actually, so it should be limited)
+
+          let
+            apartmentStays = Map.fromFoldable [ apartment /\ [ firstStay, secondStay ] ]
+            cleaningSchedule = Cleaning.scheduleFromGuestStays apartmentStays
+            apartmentSchedule = Map.lookup apartment cleaningSchedule
+            secondWindow = (Array.index <$> apartmentSchedule <*> pure 1) >>= identity
+
+          -- The second window has 6 days, so it should be limited to 5 days ending at Oct 8
+          -- That means it should start on Oct 4 (Oct 4,5,6,7,8 = 5 days)
+          expectedSecondWindow <- Maybe.maybe (throwError (error "Could not build expected CleaningWindow")) pure $ do
+            fromDate <- mkCleaningDate 2022 10 4
+            toDate <- mkCleaningDate 2022 10 8
+
+            pure { from: fromDate, to: toDate }
+
+          (((\(CleaningWindow { from, to }) -> { from, to }) <$> secondWindow)) `shouldEqual` Just expectedSecondWindow
+        
+        it "first window is always small (just one day before stay)" do
+          -- First window algorithm is different - it's always just one day before the stay
+          firstStay <- mkGuestStay (mkDate 2022 10 15) (mkDate 2022 10 18)
+
+          let
+            apartmentStays = Map.fromFoldable [ apartment /\ [ firstStay ] ]
+            cleaningSchedule = Cleaning.scheduleFromGuestStays apartmentStays
+            apartmentSchedule = Map.lookup apartment cleaningSchedule
+            firstWindow = Array.head =<< apartmentSchedule
+
+          -- The first window should be from Oct 14 to Oct 15 (always just one day before)
+          expectedFirstWindow <- Maybe.maybe (throwError (error "Could not build expected CleaningWindow")) pure $ do
+            fromDate <- mkCleaningDate 2022 10 14 -- one day before the stay
+            toDate <- mkCleaningDate 2022 10 15
+
+            pure { from: fromDate, to: toDate }
+
+          (((\(CleaningWindow { from, to }) -> { from, to }) <$> firstWindow)) `shouldEqual` Just expectedFirstWindow
