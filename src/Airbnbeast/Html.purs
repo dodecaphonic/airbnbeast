@@ -92,8 +92,9 @@ renderTimeBlockGrid isAdmin (CleaningWindow { timeBlocks }) =
   let
     timeBlocksArray = NEArray.toArray timeBlocks
     -- Filter time blocks for non-admin users to show only available ones
-    filteredTimeBlocks = if isAdmin then timeBlocksArray
-                        else Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
+    filteredTimeBlocks =
+      if isAdmin then timeBlocksArray
+      else Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
     availableCount = Array.length $ Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
     groupedByDate = groupBlocksByDate filteredTimeBlocks
   in
@@ -270,7 +271,7 @@ cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, t
       else
         -- Admin users: hide by default (controlled by toggle)
         if isFirst then "hidden mt-4 pt-4 border-t border-blue-300"
-        else "hidden mt-4 pt-4 border-t border-gray-200"
+      else "hidden mt-4 pt-4 border-t border-gray-200"
 
     -- Calculate effective date range based on available TimeBlocks
     { effectiveRange, hasGaps } = calculateEffectiveDateRange timeBlocks from to
@@ -302,7 +303,8 @@ cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, t
         dateRangeDisplay
           <> div [ attr "class" codeClasses ] stay.last4Digits
           <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
-          <> (if isAdmin then
+          <>
+            ( if isAdmin then
                 div [ attr "class" "text-center" ]
                   ( tag "button"
                       [ attr "class" buttonClasses
@@ -311,7 +313,8 @@ cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, t
                       ]
                       I18n.pt.adjustPeriods
                   )
-              else "")
+              else ""
+            )
           <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ]
             (renderTimeBlockGrid isAdmin window)
   in
