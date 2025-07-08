@@ -417,12 +417,29 @@ loginPage errorMsg =
         )
 
 guestStaysListPage :: Boolean -> Array GuestStay -> HtmlString
-guestStaysListPage isAdmin guestStays =
+guestStaysListPage isAdmin guestStays = guestStaysListPageWithError isAdmin guestStays Nothing
+
+guestStaysListPageWithError :: Boolean -> Array GuestStay -> Maybe String -> HtmlString
+guestStaysListPageWithError isAdmin guestStays errorMsg =
   html $
     head "Admin - Guest Stays Management" <>
       body
         ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
             ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] "Guest Stays Management"
+                <>
+                  ( case errorMsg of
+                      Just msg -> div [ attr "class" "mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" ]
+                        ( div [ attr "class" "flex" ]
+                            ( div [ attr "class" "flex-shrink-0" ]
+                                ( tag "svg" [ attr "class" "h-5 w-5 text-red-400", attr "viewBox" "0 0 20 20", attr "fill" "currentColor" ]
+                                    (tag "path" [ attr "fill-rule" "evenodd", attr "d" "M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z", attr "clip-rule" "evenodd" ] "")
+                                )
+                                <> div [ attr "class" "ml-3" ]
+                                  (tag "p" [ attr "class" "text-sm text-red-800" ] msg)
+                            )
+                        )
+                      Nothing -> ""
+                  )
                 <> div [ attr "class" "mb-6 flex justify-between items-center" ]
                   ( tag "a" [ attr "href" "/", attr "class" "text-blue-600 hover:text-blue-800" ] "← Back to Schedule" <>
                       tag "a" [ attr "href" "/admin/guest-stays/new", attr "class" "bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium" ] "+ Add New Guest Stay"
@@ -477,9 +494,11 @@ guestStaysListPage isAdmin guestStays =
             <>
               td [ attr "class" "px-6 py-4 whitespace-nowrap text-sm text-gray-500" ]
                 ( tag "a" [ attr "href" ("/admin/guest-stays/" <> id <> "/edit"), attr "class" "text-blue-600 hover:text-blue-800 mr-3" ] "Edit" <>
-                    tag "button"
-                      [ attr "class" "text-red-600 hover:text-red-800"
-                      , attr "onclick" ("if(confirm('Delete this guest stay?')) { fetch('/admin/guest-stays/" <> id <> "', {method: 'DELETE'}); location.reload(); }")
+                    tag "a"
+                      [ attr "href" ("/admin/guest-stays/" <> id)
+                      , attr "class" "text-red-600 hover:text-red-800"
+                      , attr "data-turbo-method" "delete"
+                      , attr "data-turbo-confirm" "Are you sure you want to delete this guest stay? This action cannot be undone."
                       ]
                       "Delete"
                 )

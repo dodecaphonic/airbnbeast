@@ -388,6 +388,7 @@ guestStaysListHandler = requireAuth \user -> do
   if not user.isAdmin then
     forbidden
   else do
+    query <- asks _.request.query
     liftEffect $ log "Serving guest stays management page"
     storage <- getStorage
 
@@ -396,7 +397,13 @@ guestStaysListHandler = requireAuth \user -> do
     santaStays <- lift $ storage.fetchStoredGuestStays (Apartment "Santa")
     let allStays = gloriaStays <> santaStays
 
-    lift $ ok' (header "Content-Type" "text/html") (Html.guestStaysListPage user.isAdmin allStays)
+    let
+      errorMsg = case Object.lookup "error" query of
+        Just "delete_failed" -> Just "Failed to delete guest stay. Please try again."
+        Just "not_found" -> Just "Guest stay not found."
+        _ -> Nothing
+
+    lift $ ok' (header "Content-Type" "text/html") (Html.guestStaysListPageWithError user.isAdmin allStays errorMsg)
 
 newGuestStayFormHandler :: RouteHandler
 newGuestStayFormHandler = requireAuth \user -> do
@@ -483,8 +490,13 @@ deleteGuestStayHandler guestStayId = requireAuth \user -> do
     storage <- getStorage
     liftEffect $ log $ "Deleting guest stay: " <> guestStayId
 
-    _ <- lift $ storage.deleteGuestStay guestStayId
-    lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+    result <- lift $ attempt $ storage.deleteGuestStay guestStayId
+    case result of
+      Right _ ->
+        lift $ found' (header "Location" "/admin/guest-stays" <> header "Turbo-Method" "get") "/admin/guest-stays"
+      Left error -> do
+        liftEffect $ log $ "Failed to delete guest stay: " <> show error
+        lift $ found' (header "Location" "/admin/guest-stays?error=delete_failed" <> header "Turbo-Method" "get") "/admin/guest-stays?error=delete_failed"
 
 routes :: AirbnbeastConfig -> Routes
 -- Login routes (migrated to ReaderT)
