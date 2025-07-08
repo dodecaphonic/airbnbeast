@@ -533,3 +533,68 @@ newGuestStayFormPage =
                     )
             )
         )
+
+editGuestStayFormPage :: GuestStay -> HtmlString
+editGuestStayFormPage guestStay =
+  let
+    apartmentName = case guestStay.apartment of
+      Apartment name -> name
+    fromDateStr = show (fromEnum $ Date.year guestStay.fromDate) <> "-"
+      <> (if fromEnum (Date.month guestStay.fromDate) < 10 then "0" else "")
+      <> show (fromEnum $ Date.month guestStay.fromDate)
+      <> "-"
+      <> (if fromEnum (Date.day guestStay.fromDate) < 10 then "0" else "")
+      <> show (fromEnum $ Date.day guestStay.fromDate)
+    toDateStr = show (fromEnum $ Date.year guestStay.toDate) <> "-"
+      <> (if fromEnum (Date.month guestStay.toDate) < 10 then "0" else "")
+      <> show (fromEnum $ Date.month guestStay.toDate)
+      <> "-"
+      <> (if fromEnum (Date.day guestStay.toDate) < 10 then "0" else "")
+      <> show (fromEnum $ Date.day guestStay.toDate)
+  in
+    html $
+      head "Admin - Edit Guest Stay" <>
+        body
+          ( div [ attr "class" "max-w-2xl mx-auto p-6" ]
+              ( h1 [ attr "class" "text-3xl font-bold text-center text-gray-800 mb-8" ] "Edit Guest Stay"
+                  <> div [ attr "class" "mb-6" ]
+                    (tag "a" [ attr "href" "/admin/guest-stays", attr "class" "text-blue-600 hover:text-blue-800" ] "← Back to Guest Stays")
+                  <>
+                    div [ attr "class" "bg-white rounded-lg shadow-sm border border-gray-200 p-6" ]
+                      ( tag "form" [ attr "method" "POST", attr "action" ("/admin/guest-stays/" <> guestStay.id), attr "onsubmit" "this.querySelector('input[name=\"_method\"]').value='PUT'" ]
+                          ( tag "input" [ attr "type" "hidden", attr "name" "_method", attr "value" "PUT" ] "" <>
+                              div [ attr "class" "space-y-4" ]
+                                ( div []
+                                    ( tag "label" [ attr "for" "apartment", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Apartment" <>
+                                        tag "select" [ attr "id" "apartment", attr "name" "apartment", attr "required" "true", attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" ]
+                                          ( tag "option" [ attr "value" "Glória", if apartmentName == "Glória" then attr "selected" "true" else attr "class" "" ] "Glória"
+                                              <>
+                                                tag "option" [ attr "value" "Santa", if apartmentName == "Santa" then attr "selected" "true" else attr "class" "" ] "Santa"
+                                          )
+                                    )
+                                    <> div []
+                                      ( tag "label" [ attr "for" "fromDate", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Check-in Date" <>
+                                          tag "input" [ attr "type" "date", attr "id" "fromDate", attr "name" "fromDate", attr "required" "true", attr "value" fromDateStr, attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" ] ""
+                                      )
+                                    <> div []
+                                      ( tag "label" [ attr "for" "toDate", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Check-out Date" <>
+                                          tag "input" [ attr "type" "date", attr "id" "toDate", attr "name" "toDate", attr "required" "true", attr "value" toDateStr, attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" ] ""
+                                      )
+                                    <> div []
+                                      ( tag "label" [ attr "for" "last4Digits", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Last 4 Digits" <>
+                                          tag "input" [ attr "type" "text", attr "id" "last4Digits", attr "name" "last4Digits", attr "maxlength" "4", attr "pattern" "[0-9]{4}", attr "required" "true", attr "value" guestStay.last4Digits, attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500", attr "placeholder" "1234" ] ""
+                                      )
+                                    <> div []
+                                      ( tag "label" [ attr "for" "link", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Booking Reference/Link" <>
+                                          tag "input" [ attr "type" "url", attr "id" "link", attr "name" "link", attr "required" "true", attr "value" guestStay.link, attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500", attr "placeholder" "https://..." ] ""
+                                      )
+                                    <>
+                                      div [ attr "class" "pt-4" ]
+                                        ( tag "button" [ attr "type" "submit", attr "class" "w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors" ] "Update Guest Stay" <>
+                                            tag "a" [ attr "href" "/admin/guest-stays", attr "class" "block w-full text-center bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-lg mt-2 transition-colors" ] "Cancel"
+                                        )
+                                )
+                          )
+                      )
+              )
+          )

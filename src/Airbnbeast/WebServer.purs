@@ -432,17 +432,48 @@ editGuestStayFormHandler guestStayId = requireAuth \user -> do
     forbidden
   else do
     liftEffect $ log $ "Serving edit form for guest stay: " <> guestStayId
-    -- For now, redirect to list since we need to implement fetching by ID
-    lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+    storage <- getStorage
+
+    maybeGuestStay <- lift $ storage.fetchGuestStayById guestStayId
+    case maybeGuestStay of
+      Just guestStay ->
+        lift $ ok' (header "Content-Type" "text/html") (Html.editGuestStayFormPage guestStay)
+      Nothing ->
+        lift $ found' (header "Location" "/admin/guest-stays?error=not_found") "/admin/guest-stays?error=not_found"
 
 updateGuestStayHandler :: String -> RouteHandler
 updateGuestStayHandler guestStayId = requireAuth \user -> do
   if not user.isAdmin then
     forbidden
   else do
+    { body } <- asks _.request
+    storage <- getStorage
+
     liftEffect $ log $ "Updating guest stay: " <> guestStayId
-    -- For now, redirect to list since we need to implement update logic
-    lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+    bodyText <- liftAff $ toString body
+
+    case parseGuestStayForm bodyText of
+      Just guestStayData -> do
+        -- Create updated guest stay with the same ID but new data
+        let
+          fallbackDate = unsafePartial $ fromMaybe bottom $ Date.canonicalDate <$> toEnum 2024 <*> toEnum 1 <*> toEnum 1
+          parsedFromDate = fromMaybe fallbackDate $ parseDate guestStayData.fromDate
+          parsedToDate = fromMaybe fallbackDate $ parseDate guestStayData.toDate
+
+          updatedGuestStay =
+            { id: guestStayId -- Keep the same ID
+            , apartment: Apartment guestStayData.apartment
+            , fromDate: parsedFromDate
+            , toDate: parsedToDate
+            , last4Digits: guestStayData.last4Digits
+            , link: guestStayData.link
+            , source: Internal
+            }
+
+        _ <- lift $ storage.saveGuestStay updatedGuestStay
+        lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+      Nothing ->
+        lift $ found' (header "Location" ("/admin/guest-stays/" <> guestStayId <> "/edit?error=invalid_data")) ("/admin/guest-stays/" <> guestStayId <> "/edit?error=invalid_data")
 
 deleteGuestStayHandler :: String -> RouteHandler
 deleteGuestStayHandler guestStayId = requireAuth \user -> do
@@ -502,6 +533,9 @@ routes config request = runRoute config request $
       editGuestStayFormHandler guestStayId
 
     { method: Put, path: [ "admin", "guest-stays", guestStayId ] } ->
+      updateGuestStayHandler guestStayId
+
+    { method: Post, path: [ "admin", "guest-stays", guestStayId ] } ->
       updateGuestStayHandler guestStayId
 
     { method: Delete, path: [ "admin", "guest-stays", guestStayId ] } ->

@@ -37,6 +37,7 @@ type Storage =
   , saveGuestStay :: GuestStay -> Aff GuestStay
   , deleteGuestStay :: String -> Aff Boolean
   , fetchStoredGuestStays :: Apartment -> Aff (Array GuestStay)
+  , fetchGuestStayById :: String -> Aff (Maybe GuestStay)
   }
 
 newtype RawTimeBlock = RawTimeBlock
@@ -102,6 +103,7 @@ sqliteStorage conn =
   , saveGuestStay: sqliteSaveGuestStay conn
   , deleteGuestStay: sqliteDeleteGuestStay conn
   , fetchStoredGuestStays: sqliteFetchStoredGuestStays conn
+  , fetchGuestStayById: sqliteFetchGuestStayById conn
   }
 
 sqliteDisableTimeBlock :: SQLite3.DBConnection -> TimeBlock -> Aff TimeBlock
@@ -376,3 +378,58 @@ sqliteFetchStoredGuestStays conn apartment = do
 
       _ -> throwError (error $ "Invalid date format: " <> dateStr)
 
+sqliteFetchGuestStayById :: SQLite3.DBConnection -> String -> Aff (Maybe GuestStay)
+sqliteFetchGuestStayById conn guestStayId = do
+  liftEffect $ Console.log $ "Fetching guest stay by ID: " <> guestStayId
+
+  let
+    sql =
+      """
+      SELECT id, apartment, from_date, to_date, last_4_digits, link, notes
+      FROM guest_stays
+      WHERE id = ?
+      LIMIT 1
+      """
+
+  results <- (decodeJson <<< unsafeFromForeign) <$> SQLite3.queryDB conn sql
+    [ unsafeToForeign guestStayId ]
+
+  case results of
+    Right (rawGuestStays :: Array RawGuestStay) ->
+      case rawGuestStays of
+        [ rawGuestStay ] -> do
+          guestStay <- convertRawGuestStay rawGuestStay
+          pure $ Just guestStay
+        [] -> pure Nothing
+        _ -> throwError (error "Multiple guest stays found with same ID")
+
+    Left e ->
+      throwError (error $ "Failed to fetch guest stay by ID: " <> show e)
+  where
+  convertRawGuestStay :: RawGuestStay -> Aff GuestStay
+  convertRawGuestStay (RawGuestStay { id, apartment: apartmentStr, from_date, to_date, last_4_digits, link }) = do
+    parsedFromDate <- parseDate from_date
+    parsedToDate <- parseDate to_date
+
+    pure
+      { id: id
+      , apartment: Apartment apartmentStr
+      , fromDate: parsedFromDate
+      , toDate: parsedToDate
+      , last4Digits: last_4_digits
+      , link: link
+      , source: Internal
+      }
+
+  parseDate :: String -> Aff Date.Date
+  parseDate dateStr = do
+    case traverse Int.fromString (String.split (Pattern "-") dateStr) of
+      Just [ yearStr, monthStr, dayStr ] ->
+        Maybe.fromMaybe (throwError $ error $ "Invalid date format: " <> dateStr) do
+          year <- toEnum yearStr
+          month <- toEnum monthStr
+          day <- toEnum dayStr
+
+          pure (pure $ Date.canonicalDate year month day)
+
+      _ -> throwError (error $ "Invalid date format: " <> dateStr)
