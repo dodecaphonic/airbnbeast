@@ -91,12 +91,18 @@ renderTimeBlockGrid :: Boolean -> CleaningWindow -> HtmlString
 renderTimeBlockGrid isAdmin (CleaningWindow { timeBlocks }) =
   let
     timeBlocksArray = NEArray.toArray timeBlocks
+    -- Filter time blocks for non-admin users to show only available ones
+    filteredTimeBlocks = if isAdmin then timeBlocksArray
+                        else Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
     availableCount = Array.length $ Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
-    groupedByDate = groupBlocksByDate timeBlocksArray
+    groupedByDate = groupBlocksByDate filteredTimeBlocks
   in
-    div [ attr "class" "space-y-2" ] $
-      div [ attr "class" "text-xs text-gray-600 mb-2 text-center" ] I18n.pt.clickToToggle <>
-        Array.foldMap (renderDateBlocks availableCount) groupedByDate
+    if Array.null filteredTimeBlocks then
+      div [ attr "class" "text-center text-gray-500 italic py-4" ] I18n.pt.noTimeBlocksAvailable
+    else
+      div [ attr "class" "space-y-2" ] $
+        (if isAdmin then div [ attr "class" "text-xs text-gray-600 mb-2 text-center" ] I18n.pt.clickToToggle else "") <>
+          Array.foldMap (renderDateBlocks availableCount) groupedByDate
   where
   groupBlocksByDate :: Array TimeBlock -> Array { date :: Date.Date, blocks :: Array TimeBlock }
   groupBlocksByDate blocks =

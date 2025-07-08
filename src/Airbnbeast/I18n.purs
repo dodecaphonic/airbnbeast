@@ -38,6 +38,7 @@ type Translations =
   , loginRequired :: String
   , serverError :: String
   , invalidLoginData :: String
+  , noTimeBlocksAvailable :: String
   }
 
 pt :: Translations
@@ -79,6 +80,7 @@ pt =
   , loginRequired: "Login necessário para acessar esta página"
   , serverError: "Erro interno do servidor"
   , invalidLoginData: "Dados de login inválidos"
+  , noTimeBlocksAvailable: "Nenhum período disponível"
   }
 
 formatDatePt :: DateTime -> String
