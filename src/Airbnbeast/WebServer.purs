@@ -299,46 +299,50 @@ removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuthR \
     Nothing ->
       notFound
 
+staticFileHandler :: String -> String -> AppM Response
+staticFileHandler contentType file = do
+  result <- lift $ attempt $ readTextFile UTF8 ("./dist/" <> file)
+
+  case result of
+    Right contents ->
+      ok' (header "Content-Type" contentType) contents
+    Left _ ->
+      notFound
+
 routes :: Storage -> Routes
 -- Login routes (migrated to ReaderT)
-routes storage request@{ method: Get, path: [ "login" ] } = runRoute storage request loginHandler
+routes storage request = runRoute storage request $
+  case request of
+    { method: Get, path: [ "login" ] } ->
+      loginHandler
 
-routes storage request@{ method: Post, path: [ "auth", "login" ] } = runRoute storage request loginAttemptHandler
+    { method: Post, path: [ "auth", "login" ] } ->
+      loginAttemptHandler
 
-routes storage request@{ method: Post, path: [ "auth", "logout" ] } = runRoute storage request logoutHandler
+    { method: Post, path: [ "auth", "logout" ] } ->
+      logoutHandler
 
--- Protected routes (migrated to ReaderT)
-routes storage request@{ method: Get, path: [] } = runRoute storage request homeHandler
+    { method: Get, path: [] } ->
+      homeHandler
 
-routes storage request@{ method: Get, path: [ "apartment", apartmentName ] } = runRoute storage request (apartmentHandler apartmentName)
+    { method: Get, path: [ "apartment", apartmentName ] } ->
+      apartmentHandler apartmentName
 
-routes _ { method: Get, path: [ "tailwind.css" ] } = do
-  liftEffect $ log "Serving Tailwind CSS"
-  result <- attempt $ readTextFile UTF8 "./dist/tailwind.css"
-  case result of
-    Right css ->
-      ok' (header "Content-Type" "text/css") css
-    Left _ ->
+    { method: Get, path: [ "tailwind.css" ] } ->
+      staticFileHandler "text/css" "tailwind.css"
+
+    { method: Get, path: [ "application.js" ] } ->
+      staticFileHandler "application/javascript" "application.js"
+
+    { method: Post, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } ->
+      createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr }
+
+    { method: Delete, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } ->
+      removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr }
+
+    _ -> do
+      liftEffect $ log "404 - Page not found"
       notFound
-
-routes _ { method: Get, path: [ "application.js" ] } = do
-  liftEffect $ log "Serving JavaScript application"
-  result <- attempt $ readTextFile UTF8 "./dist/application.js"
-  case result of
-    Right js ->
-      ok' (header "Content-Type" "application/javascript") js
-    Left _ ->
-      notFound
-
-routes storage request@{ method: Post, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } =
-  runRoute storage request (createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr })
-
-routes storage request@{ method: Delete, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } =
-  runRoute storage request (removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr })
-
-routes _ _ = do
-  liftEffect $ log "404 - Page not found"
-  notFound
 
 fetchCleaningSchedule :: Storage -> Aff (Map.Map Apartment (Array Cleaning.CleaningWindow))
 fetchCleaningSchedule storage = do
