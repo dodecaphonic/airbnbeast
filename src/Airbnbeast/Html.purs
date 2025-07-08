@@ -263,8 +263,14 @@ cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, t
       else "text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full transition-colors"
 
     gridClasses =
-      if isFirst then "hidden mt-4 pt-4 border-t border-blue-300"
-      else "hidden mt-4 pt-4 border-t border-gray-200"
+      if not isAdmin then
+        -- Non-admin users: always show the grid
+        if isFirst then "mt-4 pt-4 border-t border-blue-300"
+        else "mt-4 pt-4 border-t border-gray-200"
+      else
+        -- Admin users: hide by default (controlled by toggle)
+        if isFirst then "hidden mt-4 pt-4 border-t border-blue-300"
+        else "hidden mt-4 pt-4 border-t border-gray-200"
 
     -- Calculate effective date range based on available TimeBlocks
     { effectiveRange, hasGaps } = calculateEffectiveDateRange timeBlocks from to
@@ -296,14 +302,16 @@ cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, t
         dateRangeDisplay
           <> div [ attr "class" codeClasses ] stay.last4Digits
           <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
-          <> div [ attr "class" "text-center" ]
-            ( tag "button"
-                [ attr "class" buttonClasses
-                , attr "data-cleaning-window-target" "button"
-                , attr "data-action" "click->cleaning-window#toggle"
-                ]
-                I18n.pt.adjustPeriods
-            )
+          <> (if isAdmin then
+                div [ attr "class" "text-center" ]
+                  ( tag "button"
+                      [ attr "class" buttonClasses
+                      , attr "data-cleaning-window-target" "button"
+                      , attr "data-action" "click->cleaning-window#toggle"
+                      ]
+                      I18n.pt.adjustPeriods
+                  )
+              else "")
           <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ]
             (renderTimeBlockGrid isAdmin window)
   in
@@ -320,7 +328,7 @@ apartmentSection isAdmin apartment@(Apartment name) windows =
   where
   renderWindowCards :: Array CleaningWindow -> HtmlString
   renderWindowCards ws =
-    Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard { isFirst: index == 0, isOpen: false, isAdmin } window) ws
+    Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard { isFirst: index == 0, isOpen: not isAdmin, isAdmin } window) ws
 
 cleaningSchedulePage :: Boolean -> Map Apartment (Array CleaningWindow) -> HtmlString
 cleaningSchedulePage isAdmin schedule =
