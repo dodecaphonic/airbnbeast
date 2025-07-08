@@ -1,9 +1,11 @@
-module Airbnbeast.Availability (GuestStay, Apartment(..), fetchAvailability, fetchDayToDay, fetchGuestStays) where
+module Airbnbeast.Availability (GuestStay, Apartment(..), ReservationSource(..), fetchAvailability, fetchDayToDay, fetchGuestStays) where
 
 import Prelude
 
 import Airbnbeast.Parser (AirbnbDates, fromL, toL)
 import Airbnbeast.Parser as Parser
+import Data.Generic.Rep (class Generic)
+import Data.Show.Generic (genericShow)
 import Data.Array (foldMap)
 import Data.Array as Array
 import Data.Date (Date)
@@ -33,6 +35,16 @@ derive newtype instance Eq Apartment
 derive newtype instance Ord Apartment
 derive newtype instance Show Apartment
 
+data ReservationSource
+  = Airbnb
+  | Internal
+
+derive instance Generic ReservationSource _
+derive instance Eq ReservationSource
+
+instance Show ReservationSource where
+  show = genericShow
+
 type AirbnbCalendar =
   { apartment :: Apartment
   , icsUrl :: String
@@ -45,6 +57,7 @@ type GuestStay =
   , toDate :: Date
   , link :: String
   , id :: String
+  , source :: ReservationSource
   }
 
 type DailyOccupancy =
@@ -86,6 +99,7 @@ airbnbDatesToGuestStays = foldl dateAsGuestStay Map.empty
           , last4Digits: r.last4Digits
           , link: r.link
           , id: idFromLink r.link
+          , source: Airbnb
           }
       in
         Map.alter

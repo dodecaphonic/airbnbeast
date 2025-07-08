@@ -6,7 +6,7 @@ module Airbnbeast.Storage
 
 import Prelude
 
-import Airbnbeast.Availability (Apartment(..))
+import Airbnbeast.Availability (Apartment(..), GuestStay, ReservationSource(..))
 import Airbnbeast.Cleaning (CleaningWindow(..), TimeBlock(..), TimeOfDay(..))
 import Airbnbeast.Auth (User, UserId(..), Username(..), AuthError(..))
 import Data.Argonaut.Decode (class DecodeJson, decodeJson, (.:))
@@ -34,6 +34,9 @@ type Storage =
   , disabledTimeBlocksDuringStay :: CleaningWindow -> Aff (Array TimeBlock)
   , authenticateUser :: String -> String -> Aff (Either AuthError User)
   , fetchUserById :: UserId -> Aff (Maybe User)
+  , saveGuestStay :: GuestStay -> Aff GuestStay
+  , deleteGuestStay :: String -> Aff Boolean
+  , fetchStoredGuestStays :: Apartment -> Aff (Array GuestStay)
   }
 
 newtype RawTimeBlock = RawTimeBlock
@@ -67,6 +70,28 @@ instance DecodeJson RawUser where
     is_admin <- (\b -> b == 1) <$> obj .: "is_admin"
     pure $ RawUser { id, username, password_hash, is_admin }
 
+newtype RawGuestStay = RawGuestStay
+  { id :: String
+  , apartment :: String
+  , from_date :: String
+  , to_date :: String
+  , last_4_digits :: String
+  , link :: String
+  , notes :: String
+  }
+
+instance DecodeJson RawGuestStay where
+  decodeJson json = do
+    obj <- decodeJson json
+    id <- obj .: "id"
+    apartment <- obj .: "apartment"
+    from_date <- obj .: "from_date"
+    to_date <- obj .: "to_date"
+    last_4_digits <- obj .: "last_4_digits"
+    link <- obj .: "link"
+    notes <- obj .: "notes"
+    pure $ RawGuestStay { id, apartment, from_date, to_date, last_4_digits, link, notes }
+
 sqliteStorage :: SQLite3.DBConnection -> Storage
 sqliteStorage conn =
   { disableTimeBlock: sqliteDisableTimeBlock conn
@@ -74,6 +99,9 @@ sqliteStorage conn =
   , disabledTimeBlocksDuringStay: sqliteDisabledTimeBlocksDuringStay conn
   , authenticateUser: sqliteAuthenticateUser conn
   , fetchUserById: sqliteFetchUserById conn
+  , saveGuestStay: sqliteSaveGuestStay conn
+  , deleteGuestStay: sqliteDeleteGuestStay conn
+  , fetchStoredGuestStays: sqliteFetchStoredGuestStays conn
   }
 
 sqliteDisableTimeBlock :: SQLite3.DBConnection -> TimeBlock -> Aff TimeBlock
@@ -254,4 +282,97 @@ sqliteFetchUserById conn (UserId userId) = do
         _ -> throwError (error "Multiple users found with same ID")
 
     Left e -> throwError (error $ "Failed to query user by ID: " <> show e)
+
+-- GuestStay storage operations for Internal reservations
+sqliteSaveGuestStay :: SQLite3.DBConnection -> GuestStay -> Aff GuestStay
+sqliteSaveGuestStay conn guestStay@{ id, apartment, fromDate, toDate, last4Digits, link } = do
+  liftEffect $ Console.log $ "Saving guest stay: " <> id
+
+  let
+    apartmentStr = case apartment of
+      Apartment name -> name
+    fromDateStr = formatDate fromDate
+    toDateStr = formatDate toDate
+
+    sql =
+      """
+      INSERT OR REPLACE INTO guest_stays 
+      (id, apartment, from_date, to_date, last_4_digits, link, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      """
+
+  _ <- SQLite3.queryDB conn sql
+    [ unsafeToForeign id
+    , unsafeToForeign apartmentStr
+    , unsafeToForeign fromDateStr
+    , unsafeToForeign toDateStr
+    , unsafeToForeign last4Digits
+    , unsafeToForeign link
+    , unsafeToForeign "" -- notes - empty for now
+    ]
+
+  pure guestStay
+
+sqliteDeleteGuestStay :: SQLite3.DBConnection -> String -> Aff Boolean
+sqliteDeleteGuestStay conn guestStayId = do
+  liftEffect $ Console.log $ "Deleting guest stay: " <> guestStayId
+
+  let
+    sql = "DELETE FROM guest_stays WHERE id = ?"
+
+  _ <- SQLite3.queryDB conn sql [ unsafeToForeign guestStayId ]
+  pure true
+
+sqliteFetchStoredGuestStays :: SQLite3.DBConnection -> Apartment -> Aff (Array GuestStay)
+sqliteFetchStoredGuestStays conn apartment = do
+  let
+    apartmentStr = case apartment of
+      Apartment name -> name
+
+    sql =
+      """
+      SELECT id, apartment, from_date, to_date, last_4_digits, link, notes
+      FROM guest_stays
+      WHERE apartment = ?
+      ORDER BY from_date ASC
+      """
+
+  results <- (decodeJson <<< unsafeFromForeign) <$> SQLite3.queryDB conn sql
+    [ unsafeToForeign apartmentStr ]
+
+  case results of
+    Right (rawGuestStays :: Array RawGuestStay) -> do
+      guestStays <- traverse convertRawGuestStay rawGuestStays
+      pure guestStays
+
+    Left e ->
+      throwError (error $ "Failed to fetch stored guest stays: " <> show e)
+  where
+  convertRawGuestStay :: RawGuestStay -> Aff GuestStay
+  convertRawGuestStay (RawGuestStay { id, apartment: apartmentStr, from_date, to_date, last_4_digits, link }) = do
+    parsedFromDate <- parseDate from_date
+    parsedToDate <- parseDate to_date
+
+    pure
+      { id: id
+      , apartment: Apartment apartmentStr
+      , fromDate: parsedFromDate
+      , toDate: parsedToDate
+      , last4Digits: last_4_digits
+      , link: link
+      , source: Internal
+      }
+
+  parseDate :: String -> Aff Date.Date
+  parseDate dateStr = do
+    case traverse Int.fromString (String.split (Pattern "-") dateStr) of
+      Just [ yearStr, monthStr, dayStr ] ->
+        Maybe.fromMaybe (throwError $ error $ "Invalid date format: " <> dateStr) do
+          year <- toEnum yearStr
+          month <- toEnum monthStr
+          day <- toEnum dayStr
+
+          pure (pure $ Date.canonicalDate year month day)
+
+      _ -> throwError (error $ "Invalid date format: " <> dateStr)
 

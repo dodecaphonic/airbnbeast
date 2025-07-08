@@ -23,6 +23,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String as String
 import Data.Traversable (traverse)
+import Data.Tuple.Nested ((/\))
 import Effect.Aff (Aff, attempt)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -367,18 +368,42 @@ routes config request = runRoute config request $
 fetchCleaningSchedule :: Storage -> Aff (Map.Map Apartment (Array Cleaning.CleaningWindow))
 fetchCleaningSchedule storage = do
   let
-    gloria =
-      { apartment: Apartment "Glória"
-      , icsUrl: "https://www.airbnb.com/calendar/ical/47420131.ics?s=317a8c2653c6a64a4cc4ed1ad89f6afd"
-      }
-    santa =
-      { apartment: Apartment "Santa"
-      , icsUrl: "https://www.airbnb.com/calendar/ical/568955469596249266.ics?s=878a19388f719853be173bf4ad3dd77c"
-      }
+    apartments =
+      [ Apartment "Glória"
+      , Apartment "Santa"
+      ]
+    airbnbCalendars =
+      [ { apartment: Apartment "Glória"
+        , icsUrl: "https://www.airbnb.com/calendar/ical/47420131.ics?s=317a8c2653c6a64a4cc4ed1ad89f6afd"
+        }
+      , { apartment: Apartment "Santa"
+        , icsUrl: "https://www.airbnb.com/calendar/ical/568955469596249266.ics?s=878a19388f719853be173bf4ad3dd77c"
+        }
+      ]
 
   currentDate <- liftEffect nowDate
-  guestStays <- fetchGuestStays [ gloria, santa ]
-  let baseSchedule = Cleaning.scheduleFromGuestStaysWithDate currentDate guestStays
+
+  -- Fetch Airbnb-sourced GuestStays
+  airbnbGuestStays <- fetchGuestStays airbnbCalendars
+
+  -- Fetch database-sourced GuestStays for each apartment
+  storedGuestStays <- traverse
+    ( \apartment -> do
+        stays <- storage.fetchStoredGuestStays apartment
+        pure (apartment /\ stays)
+    )
+    apartments
+  let storedGuestStaysMap = Map.fromFoldable storedGuestStays
+
+  -- Mix Airbnb and stored guest stays, then sort by fromDate
+  let
+    mixedGuestStays = Map.unionWith
+      (\airbnbStays dbStays -> Array.sortBy (\a b -> compare a.fromDate b.fromDate) (airbnbStays <> dbStays))
+      airbnbGuestStays
+      storedGuestStaysMap
+
+  -- Generate cleaning schedule from mixed guest stays
+  let baseSchedule = Cleaning.scheduleFromGuestStaysWithDate currentDate mixedGuestStays
 
   -- Update each CleaningWindow with disabled TimeBlocks from storage
   traverse (traverse (updateCleaningWindow storage)) baseSchedule

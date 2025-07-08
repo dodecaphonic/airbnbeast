@@ -2,7 +2,7 @@ module Test.Main where
 
 import Prelude
 
-import Airbnbeast.Availability (Apartment(..))
+import Airbnbeast.Availability (Apartment(..), ReservationSource(..))
 import Airbnbeast.Cleaning (CleaningWeekend(..), CleaningWindow(..))
 import Airbnbeast.Cleaning as Cleaning
 import Airbnbeast.Parser (AirbnbDates(..))
@@ -185,6 +185,7 @@ cleaningSpecs = do
             , toDate
             , link
             , id: "-"
+            , source: Airbnb
             }
 
         mkDate y m d = DT.canonicalDate <$> toEnum y <*> toEnum m <*> toEnum d
