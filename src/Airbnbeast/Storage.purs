@@ -33,6 +33,7 @@ type Storage =
   , enableTimeBlock :: TimeBlock -> Aff TimeBlock
   , disabledTimeBlocksDuringStay :: CleaningWindow -> Aff (Array TimeBlock)
   , authenticateUser :: String -> String -> Aff (Either AuthError User)
+  , fetchUserById :: UserId -> Aff (Maybe User)
   }
 
 newtype RawTimeBlock = RawTimeBlock
@@ -72,6 +73,7 @@ sqliteStorage conn =
   , enableTimeBlock: sqliteEnableTimeBlock conn
   , disabledTimeBlocksDuringStay: sqliteDisabledTimeBlocksDuringStay conn
   , authenticateUser: sqliteAuthenticateUser conn
+  , fetchUserById: sqliteFetchUserById conn
   }
 
 sqliteDisableTimeBlock :: SQLite3.DBConnection -> TimeBlock -> Aff TimeBlock
@@ -222,4 +224,34 @@ sqliteAuthenticateUser conn username password = do
         _ -> pure $ Left (DatabaseError "Multiple users found with same username")
 
     Left e -> pure $ Left (DatabaseError $ "Failed to query users: " <> show e)
+
+sqliteFetchUserById :: SQLite3.DBConnection -> UserId -> Aff (Maybe User)
+sqliteFetchUserById conn (UserId userId) = do
+  liftEffect $ Console.log $ "Fetching user by ID: " <> show userId
+
+  let
+    sql =
+      """
+      SELECT id, username, password_hash, is_admin
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    """
+
+  results <- (decodeJson <<< unsafeFromForeign) <$> SQLite3.queryDB conn sql
+    [ unsafeToForeign userId ]
+
+  case results of
+    Right (users :: Array RawUser) ->
+      case users of
+        [ RawUser { id, username: dbUsername, is_admin } ] ->
+          pure $ Just
+            { id: UserId id
+            , username: Username dbUsername
+            , isAdmin: is_admin
+            }
+        [] -> pure Nothing
+        _ -> throwError (error "Multiple users found with same ID")
+
+    Left e -> throwError (error $ "Failed to query user by ID: " <> show e)
 

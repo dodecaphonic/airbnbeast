@@ -21,7 +21,7 @@ import Data.Int as Int
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String as String
-import Data.Traversable (traverse)
+import Data.Traversable (sequence, traverse)
 import Effect.Aff (Aff, attempt)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -102,20 +102,25 @@ extractCookieHeader headersStr = do
       Just value -> Just $ String.trim value
       Nothing -> Nothing
 
-requireAuthR :: (User -> AppM Response) -> AppM Response
-requireAuthR action = do
-  maybeUser <- getCurrentUser
+requireAuth :: (User -> AppM Response) -> AppM Response
+requireAuth action = do
+  maybeUser <- refreshUser
   case maybeUser of
     Just user -> action user
     Nothing -> redirectToLogin
 
--- | Helper that runs an action if authenticated, otherwise redirects to login
-requireAuth :: (User -> AppM Response) -> AppM Response
-requireAuth action = do
-  maybeUser <- getCurrentUser
-  case maybeUser of
-    Just user -> action user
-    Nothing -> redirectToLogin
+  where
+  refreshUser :: AppM (Maybe User)
+  refreshUser = do
+    storage <- getStorage
+    currentUser <- getCurrentUser
+
+    case currentUser of
+      Just user -> do
+        lift $ storage.fetchUserById user.id
+
+      Nothing ->
+        pure Nothing
 
 parseLoginForm :: String -> Maybe { username :: String, password :: String }
 parseLoginForm formData = do
@@ -183,7 +188,7 @@ createTimeBlock apartment date timeOfDay available =
 
 -- | ReaderT-based home handler
 homeHandler :: RouteHandler
-homeHandler = requireAuthR \user -> do
+homeHandler = requireAuth \user -> do
   liftEffect $ log $ "🏠 Serving full cleaning schedule for user: " <> show user.username
   storage <- getStorage
   schedule <- liftAff $ fetchCleaningSchedule storage
@@ -262,7 +267,7 @@ type TimeBlockIdentifier =
   }
 
 createTimeBlockHandler :: TimeBlockIdentifier -> AppM Response
-createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuthR \_ -> do
+createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuth \_ -> do
   liftEffect $ log $ "Enabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
   case parsePathParameters apartmentName dateStr timeOfDayStr of
     Just { apartment, date, timeOfDay } -> do
@@ -281,7 +286,7 @@ createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuthR \
       notFound
 
 removeTimeBlockHandler :: TimeBlockIdentifier -> AppM Response
-removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuthR \_ -> do
+removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuth \_ -> do
   liftEffect $ log $ "Disabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
   case parsePathParameters apartmentName dateStr timeOfDayStr of
     Just { apartment, date, timeOfDay } -> do
