@@ -6,9 +6,10 @@ import Airbnbeast.Auth (AuthError(..), Session, User)
 import Airbnbeast.Availability (Apartment(..), fetchGuestStays)
 import Airbnbeast.Cleaning (TimeOfDay(..), TimeBlock(..))
 import Airbnbeast.Cleaning as Cleaning
+import Airbnbeast.Config (AirbnbeastConfig)
 import Airbnbeast.Html as Html
 import Airbnbeast.I18n as I18n
-import Airbnbeast.Session (defaultSessionConfig, createSession, validateSession, createSessionCookie, parseSessionFromCookie)
+import Airbnbeast.Session (SessionConfig, createSession, createSessionCookie, defaultSessionConfig, parseSessionFromCookie, validateSession)
 import Airbnbeast.Storage (Storage)
 import Control.Monad.Reader (ReaderT, asks, lift, runReaderT)
 import Data.Array as Array
@@ -50,10 +51,10 @@ type AppM = ReaderT Context Aff
 type RouteHandler = AppM Response
 
 -- | Convert an AppM computation to a ResponseM for HTTPure compatibility
-runRoute :: Storage -> Request -> AppM Response -> ResponseM
-runRoute storage request appAction = do
+runRoute :: AirbnbeastConfig -> Request -> AppM Response -> ResponseM
+runRoute { sessionConfig, storage } request appAction = do
   let
-    currentUser = getSessionFromRequest request >>= \session -> Just session.user
+    currentUser = getSessionFromRequest sessionConfig request >>= \session -> Just session.user
     context = { currentUser, request, storage }
   runReaderT appAction context
 
@@ -74,8 +75,8 @@ forbidden :: AppM Response
 forbidden = liftAff $ response 403 "Forbidden"
 
 -- Secure session management with HMAC signatures
-getSessionFromRequest :: Request -> Maybe Session
-getSessionFromRequest request = do
+getSessionFromRequest :: SessionConfig -> Request -> Maybe Session
+getSessionFromRequest sessionConfig request = do
   let headersStr = show request.headers
   case extractCookieHeader headersStr of
     Nothing -> Nothing -- No cookie header found
@@ -84,7 +85,7 @@ getSessionFromRequest request = do
         Nothing -> Nothing -- No session token in cookies
         Just sessionToken -> do
           -- Log session validation attempt for debugging
-          case validateSession defaultSessionConfig sessionToken of
+          case validateSession sessionConfig sessionToken of
             Just session -> Just session
             Nothing -> Nothing
 
@@ -328,9 +329,9 @@ staticFileHandler contentType file = do
     Left _ ->
       notFound
 
-routes :: Storage -> Routes
+routes :: AirbnbeastConfig -> Routes
 -- Login routes (migrated to ReaderT)
-routes storage request = runRoute storage request $
+routes config request = runRoute config request $
   case request of
     { method: Get, path: [ "login" ] } ->
       loginHandler
@@ -409,8 +410,8 @@ fetchCleaningSchedule storage = do
   timeBlockMatches (Cleaning.TimeBlock a) (Cleaning.TimeBlock b) =
     a.date == b.date && a.timeOfDay == b.timeOfDay && a.apartment == b.apartment
 
-startServer :: { storage :: Storage, port :: Int } -> ServerM
-startServer { port, storage } = do
+startServer :: { sessionConfig :: SessionConfig, storage :: Storage, port :: Int } -> ServerM
+startServer { port, storage, sessionConfig } = do
   log $ "🚀 Airbnbeast web server starting on port " <> show port
   log "📋 Available routes:"
   log "  / - Full cleaning schedule"
@@ -418,5 +419,5 @@ startServer { port, storage } = do
   log "  POST /apartments/:apartment/time-blocks/:date/:timeOfDay - Enable time block"
   log "  DELETE /apartments/:apartment/time-blocks/:date/:timeOfDay - Disable time block"
   log ""
-  serve port (routes storage) do
+  serve port (routes { sessionConfig, storage }) do
     log $ "✅ Server is running on http://localhost:" <> show port

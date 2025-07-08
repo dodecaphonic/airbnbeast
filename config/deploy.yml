@@ -21,6 +21,8 @@ env:
     PORT: 8080
     NODE_ENV: production
     DATABASE_PATH: /data/airbnbeast/airbnbeast.sqlite3
+  secret:
+    - SESSION_SECRET
 
 volumes:
   - "/data/airbnbeast:/data/airbnbeast"

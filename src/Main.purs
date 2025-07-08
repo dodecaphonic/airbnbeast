@@ -4,6 +4,7 @@ module Main
 
 import Prelude
 
+import Airbnbeast.Session (SessionConfig, defaultSessionConfig)
 import Airbnbeast.Storage as Storage
 import Airbnbeast.WebServer as WebServer
 import Data.Maybe (fromMaybe)
@@ -18,8 +19,16 @@ openDBConnection = do
   dbPath <- liftEffect $ fromMaybe "db/airbnbeast.sqlite3" <$> Process.lookupEnv "DATABASE_PATH"
   SQLite3.newDB dbPath
 
+createSessionConfig :: Aff SessionConfig
+createSessionConfig = do
+  secret <- liftEffect $ fromMaybe defaultSessionConfig.secret <$> Process.lookupEnv "SESSION_SECRET"
+
+  pure $ defaultSessionConfig { secret = secret }
+
 main :: Effect (Fiber (Effect Unit -> Effect Unit))
 main = launchAff do
   storage <- Storage.sqliteStorage <$> openDBConnection
-  liftEffect $ WebServer.startServer { storage, port: 8080 }
+  sessionConfig <- createSessionConfig
+
+  liftEffect $ WebServer.startServer { sessionConfig, storage, port: 8080 }
 
