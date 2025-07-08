@@ -7,7 +7,8 @@ import Airbnbeast.Cleaning as Cleaning
 import Airbnbeast.Html as Html
 import Airbnbeast.I18n as I18n
 import Airbnbeast.Storage (Storage)
-import Airbnbeast.Auth (AuthError(..))
+import Airbnbeast.Auth (AuthError(..), Session)
+import Airbnbeast.Session (defaultSessionConfig, createSession, validateSession, createSessionCookie, parseSessionFromCookie)
 import Data.Either (Either(..))
 import Data.Map as Map
 import Foreign.Object as Object
@@ -33,18 +34,48 @@ import Node.FS.Aff (readTextFile)
 
 type Routes = Request -> ResponseM
 
--- Simple session management - in production you'd want more robust session handling
-isAuthenticated :: Request -> Boolean
-isAuthenticated request =
-  -- For now, just check for a basic "session" cookie
-  -- In production, you'd validate the session against a database
-  -- This is a simplified check - in a real app you'd properly parse cookies
-  String.contains (String.Pattern "session=authenticated") (show request.headers)
+-- Secure session management with HMAC signatures  
+getSessionFromRequest :: Request -> Maybe Session
+getSessionFromRequest request = do
+  let headersStr = show request.headers
+  case extractCookieHeader headersStr of
+    Nothing -> Nothing -- No cookie header found
+    Just cookieHeader -> do
+      case parseSessionFromCookie cookieHeader of
+        Nothing -> Nothing -- No session token in cookies
+        Just sessionToken -> do
+          -- Log session validation attempt for debugging
+          case validateSession defaultSessionConfig sessionToken of
+            Just session -> Just session
+            Nothing -> Nothing
+
+-- Extract cookie header from headers string representation
+extractCookieHeader :: String -> Maybe String
+extractCookieHeader headersStr = do
+  let lines = String.split (String.Pattern "\n") headersStr
+  -- Try both lowercase and capitalized versions
+  cookieLine <- Array.find
+    ( \line ->
+        String.contains (String.Pattern "cookie:") (String.toLower line) ||
+          String.contains (String.Pattern "Cookie:") line
+    )
+    lines
+  let cleanLine = String.trim cookieLine
+  case String.stripPrefix (String.Pattern "cookie:") (String.toLower cleanLine) of
+    Just value -> Just $ String.trim value
+    Nothing -> case String.stripPrefix (String.Pattern "Cookie:") cleanLine of
+      Just value -> Just $ String.trim value
+      Nothing -> Nothing
 
 requireAuth :: Request -> ResponseM -> ResponseM
 requireAuth request action =
-  if isAuthenticated request then action
-  else found' (header "Location" "/login") "/login"
+  case getSessionFromRequest request of
+    Just _ -> do
+      liftEffect $ log "✅ Authentication successful"
+      action
+    Nothing -> do
+      liftEffect $ log "❌ Authentication failed - redirecting to login"
+      found' (header "Location" "/login") "/login"
 
 parseLoginForm :: String -> Maybe { username :: String, password :: String }
 parseLoginForm formData = do
@@ -131,9 +162,12 @@ routes storage { method: Post, path: [ "auth", "login" ], body } = do
       case authResult of
         Right user -> do
           liftEffect $ log $ "User authenticated: " <> show user.username
-          -- Set a simple session cookie and redirect to main page
+          -- Create secure session token
+          sessionToken <- createSession defaultSessionConfig user
+          liftEffect $ log $ "🔑 Created session token: " <> String.take 20 sessionToken <> "..."
+          liftEffect $ log $ "🍪 Setting cookie: " <> createSessionCookie sessionToken
           found'
-            (header "Set-Cookie" "session=authenticated; Path=/; HttpOnly" <> header "Location" "/")
+            (header "Set-Cookie" (createSessionCookie sessionToken) <> header "Location" "/")
             "/"
         Left InvalidCredentials ->
           found' (header "Location" "/login?error=invalid_credentials") "/login?error=invalid_credentials"
@@ -148,7 +182,7 @@ routes storage { method: Post, path: [ "auth", "login" ], body } = do
 routes _ { method: Post, path: [ "auth", "logout" ] } = do
   liftEffect $ log "Processing logout"
   found'
-    (header "Set-Cookie" "session=; Path=/; HttpOnly; Expires=Thu, 01 Jan 1970 00:00:00 GMT" <> header "Location" "/login")
+    (header "Set-Cookie" "_airbnbeast_session=; Path=/; HttpOnly; Expires=Thu, 01 Jan 1970 00:00:00 GMT" <> header "Location" "/login")
     "/login"
 
 -- Protected routes

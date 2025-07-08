@@ -32,12 +32,14 @@ import Test.Spec (SpecT, describe, it)
 import Test.Spec.Assertions (fail, shouldEqual)
 import Test.Spec.Reporter (consoleReporter)
 import Test.Spec.Runner (runSpec)
+import Test.Airbnbeast.SessionSpec (sessionSpecs)
 
 main :: Effect Unit
 main = launchAff_ $ runSpec [ consoleReporter ] do
   nodeICalSpecs
   airbnbeastSpecs
   cleaningSpecs
+  sessionSpecs
 
 nodeICalSpecs :: forall m g. Monad m => MonadThrow Error g => MonadEffect g => SpecT g Unit m Unit
 nodeICalSpecs = do
