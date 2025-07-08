@@ -87,8 +87,8 @@ apartmentToUrl (Apartment "Santa") = "santa"
 apartmentToUrl (Apartment name) = name -- fallback for any other apartments
 
 -- Render the time block grid for a cleaning window
-renderTimeBlockGrid :: CleaningWindow -> HtmlString
-renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
+renderTimeBlockGrid :: Boolean -> CleaningWindow -> HtmlString
+renderTimeBlockGrid isAdmin (CleaningWindow { timeBlocks }) =
   let
     timeBlocksArray = NEArray.toArray timeBlocks
     availableCount = Array.length $ Array.filter (\(TimeBlock { available }) -> available) timeBlocksArray
@@ -115,17 +115,19 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
   renderDateBlocks availableCount { date, blocks } =
     div [ attr "class" "flex items-center justify-between py-1" ] $
       div [ attr "class" "text-xs font-medium text-gray-700 w-20" ] (formatDateOnly date) <>
-        div [ attr "class" "flex gap-1" ] (Array.foldMap (renderTimeBlock availableCount) blocks)
+        div [ attr "class" "flex gap-1" ] (Array.foldMap (renderTimeBlock isAdmin availableCount) blocks)
 
-  renderTimeBlock :: Int -> TimeBlock -> HtmlString
-  renderTimeBlock availableCount (TimeBlock { date, timeOfDay, available, apartment }) =
+  renderTimeBlock :: Boolean -> Int -> TimeBlock -> HtmlString
+  renderTimeBlock isAdmin availableCount (TimeBlock { date, timeOfDay, available, apartment }) =
     let
       timeLabel = case timeOfDay of
         Morning -> I18n.pt.morning
         Afternoon -> I18n.pt.afternoon
 
       -- Determine if this block can be toggled
-      isDisabled = available && availableCount <= 1 -- Can't disable the last available block
+      -- For admins: can't disable the last available block
+      -- For non-admins: blocks look normal but have no functionality
+      isDisabled = isAdmin && available && availableCount <= 1
 
       baseClasses = "text-xs px-2 py-1 rounded transition-colors no-underline "
       statusClasses =
@@ -158,8 +160,11 @@ renderTimeBlockGrid (CleaningWindow { timeBlocks }) =
       turboMethod = if available then "delete" else "post"
 
       linkAttrs =
-        if isDisabled then [ attr "class" (baseClasses <> statusClasses) ]
+        if isDisabled || not isAdmin then
+          -- Disabled blocks (last available) or non-admin users: no functionality
+          [ attr "class" (baseClasses <> statusClasses) ]
         else
+          -- Admin users with functional blocks
           [ attr "class" (baseClasses <> statusClasses)
           , attr "href" href
           , attr "data-turbo-method" turboMethod
@@ -225,8 +230,8 @@ calculateEffectiveDateRange timeBlocks originalFrom originalTo =
     in
       pure $ DateTime date time
 
-cleaningWindowCard :: { isFirst :: Boolean, isOpen :: Boolean } -> CleaningWindow -> HtmlString
-cleaningWindowCard { isFirst, isOpen } window@(CleaningWindow { from, to, stay, timeBlocks }) =
+cleaningWindowCard :: { isFirst :: Boolean, isOpen :: Boolean, isAdmin :: Boolean } -> CleaningWindow -> HtmlString
+cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, to, stay, timeBlocks }) =
   let
     -- Generate unique frame ID based on apartment and stay details
     frameId = "cleaning-window-" <> apartmentToUrl stay.apartment <> "-" <> stay.last4Digits
@@ -294,12 +299,12 @@ cleaningWindowCard { isFirst, isOpen } window@(CleaningWindow { from, to, stay, 
                 I18n.pt.adjustPeriods
             )
           <> div [ attr "data-cleaning-window-target" "grid", attr "class" gridClasses ]
-            (renderTimeBlockGrid window)
+            (renderTimeBlockGrid isAdmin window)
   in
     turboFrame frameId cardContent
 
-apartmentSection :: Apartment -> Array CleaningWindow -> HtmlString
-apartmentSection apartment@(Apartment name) windows =
+apartmentSection :: Boolean -> Apartment -> Array CleaningWindow -> HtmlString
+apartmentSection isAdmin apartment@(Apartment name) windows =
   div [ attr "class" "mb-8" ] $
     h2 [ attr "class" "text-2xl font-semibold mb-4 pb-2 border-b-2 border-blue-500" ]
       (tag "a" [ attr "href" ("/apartment/" <> apartmentToUrl apartment), attr "class" "text-gray-800 hover:text-blue-600 transition-colors no-underline" ] name) <>
@@ -309,29 +314,29 @@ apartmentSection apartment@(Apartment name) windows =
   where
   renderWindowCards :: Array CleaningWindow -> HtmlString
   renderWindowCards ws =
-    Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard { isFirst: index == 0, isOpen: false } window) ws
+    Array.fold $ Array.mapWithIndex (\index window -> cleaningWindowCard { isFirst: index == 0, isOpen: false, isAdmin } window) ws
 
-cleaningSchedulePage :: Map Apartment (Array CleaningWindow) -> HtmlString
-cleaningSchedulePage schedule =
+cleaningSchedulePage :: Boolean -> Map Apartment (Array CleaningWindow) -> HtmlString
+cleaningSchedulePage isAdmin schedule =
   html $
     head I18n.pt.pageTitle <>
       body
         ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
             ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] I18n.pt.cleaningSchedule <>
                 if Map.isEmpty schedule then div [ attr "class" "text-center text-gray-500 italic py-20" ] I18n.pt.noCleaningWindows
-                else Array.foldMap (\(apartment /\ windows) -> apartmentSection apartment windows)
+                else Array.foldMap (\(apartment /\ windows) -> apartmentSection isAdmin apartment windows)
                   (Map.toUnfoldable schedule :: Array _)
             )
         )
 
-apartmentPage :: Apartment -> Array CleaningWindow -> HtmlString
-apartmentPage apartment@(Apartment name) windows =
+apartmentPage :: Boolean -> Apartment -> Array CleaningWindow -> HtmlString
+apartmentPage isAdmin apartment@(Apartment name) windows =
   html $
     head (I18n.pt.apartmentSchedule name) <>
       body
         ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
             ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] (I18n.pt.apartmentSchedule name) <>
-                apartmentSection apartment windows
+                apartmentSection isAdmin apartment windows
             )
         )
 

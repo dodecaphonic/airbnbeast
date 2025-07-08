@@ -28,7 +28,7 @@ import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Now (nowDate)
 import Foreign.Object as Object
-import HTTPure (Request, ResponseM, ServerM, Response, found', header, notFound, ok', serve)
+import HTTPure (Request, ResponseM, ServerM, Response, found', header, notFound, ok', serve, response)
 import HTTPure.Body (toString)
 import HTTPure.Method (Method(..))
 import Node.Encoding (Encoding(..))
@@ -68,6 +68,10 @@ getStorage = asks _.storage
 -- | Helper to create a redirect response to login
 redirectToLogin :: AppM Response
 redirectToLogin = liftAff $ found' (header "Location" "/login") "/login"
+
+-- | Helper to create a forbidden response
+forbidden :: AppM Response
+forbidden = liftAff $ response 403 "Forbidden"
 
 -- Secure session management with HMAC signatures
 getSessionFromRequest :: Request -> Maybe Session
@@ -192,7 +196,7 @@ homeHandler = requireAuth \user -> do
   liftEffect $ log $ "🏠 Serving full cleaning schedule for user: " <> show user.username
   storage <- getStorage
   schedule <- liftAff $ fetchCleaningSchedule storage
-  liftAff $ ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage schedule)
+  liftAff $ ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage user.isAdmin schedule)
 
 -- | ReaderT-based login handler
 loginHandler :: RouteHandler
@@ -245,7 +249,7 @@ logoutHandler = do
     "/login"
 
 apartmentHandler :: String -> RouteHandler
-apartmentHandler apartmentName = do
+apartmentHandler apartmentName = requireAuth \user -> do
   liftEffect $ log $ "Serving apartment page for: " <> apartmentName
   storage <- getStorage
   schedule <- lift $ fetchCleaningSchedule storage
@@ -254,7 +258,7 @@ apartmentHandler apartmentName = do
     Just apartment ->
       case Map.lookup apartment schedule of
         Just windows ->
-          ok' (header "Content-Type" "text/html") (Html.apartmentPage apartment windows)
+          ok' (header "Content-Type" "text/html") (Html.apartmentPage user.isAdmin apartment windows)
         Nothing ->
           notFound
     Nothing ->
@@ -267,42 +271,52 @@ type TimeBlockIdentifier =
   }
 
 createTimeBlockHandler :: TimeBlockIdentifier -> AppM Response
-createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuth \_ -> do
+createTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuth \user -> do
   liftEffect $ log $ "Enabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
-  case parsePathParameters apartmentName dateStr timeOfDayStr of
-    Just { apartment, date, timeOfDay } -> do
-      storage <- getStorage
-      let timeBlock = createTimeBlock apartment date timeOfDay true
-      _ <- lift $ attempt $ storage.enableTimeBlock timeBlock
 
-      -- Return the updated frame content
-      schedule <- lift $ fetchCleaningSchedule storage
-      case findCleaningWindowByTimeBlock timeBlock schedule of
-        Just window ->
-          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
-        Nothing ->
-          notFound
-    Nothing ->
-      notFound
+  -- Check if user is admin
+  if not user.isAdmin then
+    forbidden
+  else
+    case parsePathParameters apartmentName dateStr timeOfDayStr of
+      Just { apartment, date, timeOfDay } -> do
+        storage <- getStorage
+        let timeBlock = createTimeBlock apartment date timeOfDay true
+        _ <- lift $ attempt $ storage.enableTimeBlock timeBlock
+
+        -- Return the updated frame content
+        schedule <- lift $ fetchCleaningSchedule storage
+        case findCleaningWindowByTimeBlock timeBlock schedule of
+          Just window ->
+            ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true, isAdmin: user.isAdmin } window)
+          Nothing ->
+            notFound
+      Nothing ->
+        notFound
 
 removeTimeBlockHandler :: TimeBlockIdentifier -> AppM Response
-removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuth \_ -> do
+removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr } = requireAuth \user -> do
   liftEffect $ log $ "Disabling time block: " <> apartmentName <> " " <> dateStr <> " " <> timeOfDayStr
-  case parsePathParameters apartmentName dateStr timeOfDayStr of
-    Just { apartment, date, timeOfDay } -> do
-      let timeBlock = createTimeBlock apartment date timeOfDay false
-      storage <- getStorage
-      _ <- lift $ attempt $ storage.disableTimeBlock timeBlock
 
-      -- Return the updated frame content
-      schedule <- lift $ fetchCleaningSchedule storage
-      case findCleaningWindowByTimeBlock timeBlock schedule of
-        Just window ->
-          ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true } window)
-        Nothing ->
-          notFound
-    Nothing ->
-      notFound
+  -- Check if user is admin
+  if not user.isAdmin then
+    forbidden
+  else
+    case parsePathParameters apartmentName dateStr timeOfDayStr of
+      Just { apartment, date, timeOfDay } -> do
+        let timeBlock = createTimeBlock apartment date timeOfDay false
+        storage <- getStorage
+        _ <- lift $ attempt $ storage.disableTimeBlock timeBlock
+
+        -- Return the updated frame content
+        schedule <- lift $ fetchCleaningSchedule storage
+        case findCleaningWindowByTimeBlock timeBlock schedule of
+          Just window ->
+            ok' (header "Content-Type" "text/html") (Html.cleaningWindowCard { isFirst: false, isOpen: true, isAdmin: user.isAdmin } window)
+          Nothing ->
+            notFound
+      Nothing ->
+        notFound
 
 staticFileHandler :: String -> String -> AppM Response
 staticFileHandler contentType file = do
