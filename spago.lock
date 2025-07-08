@@ -39,7 +39,8 @@
             "spec",
             "strings",
             "transformers",
-            "tuples"
+            "tuples",
+            "uuid"
           ],
           "build_plan": [
             "aff",
@@ -119,7 +120,8 @@
             "type-equality",
             "typelevel-prelude",
             "unfoldable",
-            "unsafe-coerce"
+            "unsafe-coerce",
+            "uuid"
           ]
         },
         "test": {
@@ -6212,6 +6214,20 @@
       "url": "https://github.com/purescript/purescript-unsafe-coerce.git",
       "rev": "ab956f82e66e633f647fb3098e8ddd3ec58d689f",
       "dependencies": []
+    },
+    "uuid": {
+      "type": "git",
+      "url": "https://github.com/megamaddu/purescript-uuid.git",
+      "rev": "69128690b8686e3f819f1e107a960509664bca3f",
+      "dependencies": [
+        "aff",
+        "effect",
+        "maybe",
+        "partial",
+        "prelude",
+        "spec",
+        "strings"
+      ]
     }
   }
 }

@@ -35,6 +35,7 @@ package:
     - strings
     - transformers
     - tuples
+    - uuid
   name: airbnbeast
 workspace:
   extraPackages: {}

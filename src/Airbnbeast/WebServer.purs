@@ -3,7 +3,7 @@ module Airbnbeast.WebServer where
 import Prelude
 
 import Airbnbeast.Auth (AuthError(..), Session, User)
-import Airbnbeast.Availability (Apartment(..), fetchGuestStays)
+import Airbnbeast.Availability (Apartment(..), GuestStay, ReservationSource(..), fetchGuestStays)
 import Airbnbeast.Cleaning (TimeOfDay(..), TimeBlock(..))
 import Airbnbeast.Cleaning as Cleaning
 import Airbnbeast.Config (AirbnbeastConfig)
@@ -16,14 +16,18 @@ import Data.Array as Array
 import Data.Array.NonEmpty as NEArray
 import Data.Date (Date)
 import Data.Date as Date
+import Data.DateTime as DateTime
 import Data.Either (Either(..))
-import Data.Enum (toEnum)
+import Data.Enum (toEnum, fromEnum)
 import Data.Int as Int
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Maybe (fromMaybe)
 import Data.String as String
+import Data.Time (Time)
 import Data.Traversable (traverse)
 import Data.Tuple.Nested ((/\))
+import Data.UUID as UUID
 import Effect.Aff (Aff, attempt)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -35,6 +39,8 @@ import HTTPure.Body (toString)
 import HTTPure.Method (Method(..))
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
+import JSURI (decodeURIComponent)
+import Partial.Unsafe (unsafePartial)
 
 type Routes = Request -> ResponseM
 
@@ -139,7 +145,10 @@ getFormValue :: String -> Array String -> Maybe String
 getFormValue key pairs = do
   let keyPrefix = key <> "="
   pair <- Array.find (String.contains (String.Pattern keyPrefix)) pairs
-  String.stripPrefix (String.Pattern keyPrefix) pair
+  encodedValue <- String.stripPrefix (String.Pattern keyPrefix) pair
+  pure $ case decodeURIComponent encodedValue of
+    Just decoded -> decoded
+    Nothing -> encodedValue -- fallback to original if decoding fails
 
 normalizeApartmentName :: String -> Maybe Apartment
 normalizeApartmentName "gloria" = Just (Apartment "Glória")
@@ -170,6 +179,43 @@ parseTimeOfDay "Morning" = Just Morning -- backward compatibility
 parseTimeOfDay "Afternoon" = Just Afternoon -- backward compatibility
 parseTimeOfDay _ = Nothing
 
+type GuestStayFormData =
+  { apartment :: String
+  , fromDate :: String
+  , toDate :: String
+  , last4Digits :: String
+  , link :: String
+  }
+
+parseGuestStayForm :: String -> Maybe GuestStayFormData
+parseGuestStayForm formData = do
+  let pairs = String.split (String.Pattern "&") formData
+  apartment <- getFormValue "apartment" pairs
+  fromDate <- getFormValue "fromDate" pairs
+  toDate <- getFormValue "toDate" pairs
+  last4Digits <- getFormValue "last4Digits" pairs
+  link <- getFormValue "link" pairs
+  pure { apartment, fromDate, toDate, last4Digits, link }
+
+createInternalGuestStay :: GuestStayFormData -> AppM GuestStay
+createInternalGuestStay { apartment, fromDate, toDate, last4Digits, link } = do
+  let
+    fallbackDate = unsafePartial $ fromMaybe bottom $ Date.canonicalDate <$> toEnum 2024 <*> toEnum 1 <*> toEnum 1
+    parsedFromDate = fromMaybe fallbackDate $ parseDate fromDate
+    parsedToDate = fromMaybe fallbackDate $ parseDate toDate
+
+  uuid <- liftEffect UUID.genUUID
+
+  pure
+    { id: UUID.toString uuid
+    , apartment: Apartment apartment
+    , fromDate: parsedFromDate
+    , toDate: parsedToDate
+    , last4Digits: last4Digits
+    , link: link
+    , source: Internal
+    }
+
 -- Find a cleaning window that contains the specified TimeBlock
 findCleaningWindowByTimeBlock :: TimeBlock -> Map.Map Apartment (Array Cleaning.CleaningWindow) -> Maybe Cleaning.CleaningWindow
 findCleaningWindowByTimeBlock (TimeBlock { apartment, date, timeOfDay }) schedule = do
@@ -199,6 +245,12 @@ homeHandler = requireAuth \user -> do
   storage <- getStorage
   schedule <- liftAff $ fetchCleaningSchedule storage
   liftAff $ ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage user.isAdmin schedule)
+
+-- | Index page handler with admin-aware navigation
+indexHandler :: RouteHandler
+indexHandler = requireAuth \user -> do
+  liftEffect $ log $ "🏠 Serving index page for user: " <> show user.username
+  lift $ ok' (header "Content-Type" "text/html") (Html.indexPage user.isAdmin)
 
 -- | ReaderT-based login handler
 loginHandler :: RouteHandler
@@ -330,6 +382,79 @@ staticFileHandler contentType file = do
     Left _ ->
       notFound
 
+-- Admin-only GuestStay management handlers
+guestStaysListHandler :: RouteHandler
+guestStaysListHandler = requireAuth \user -> do
+  if not user.isAdmin then
+    forbidden
+  else do
+    liftEffect $ log "Serving guest stays management page"
+    storage <- getStorage
+
+    -- Fetch Internal guest stays for all apartments
+    gloriaStays <- lift $ storage.fetchStoredGuestStays (Apartment "Glória")
+    santaStays <- lift $ storage.fetchStoredGuestStays (Apartment "Santa")
+    let allStays = gloriaStays <> santaStays
+
+    lift $ ok' (header "Content-Type" "text/html") (Html.guestStaysListPage user.isAdmin allStays)
+
+newGuestStayFormHandler :: RouteHandler
+newGuestStayFormHandler = requireAuth \user -> do
+  if not user.isAdmin then
+    forbidden
+  else do
+    liftEffect $ log "Serving new guest stay form"
+    lift $ ok' (header "Content-Type" "text/html") Html.newGuestStayFormPage
+
+createGuestStayHandler :: RouteHandler
+createGuestStayHandler = requireAuth \user -> do
+  if not user.isAdmin then
+    forbidden
+  else do
+    { body } <- asks _.request
+    storage <- getStorage
+
+    liftEffect $ log "Creating new guest stay"
+    bodyText <- liftAff $ toString body
+
+    case parseGuestStayForm bodyText of
+      Just guestStayData -> do
+        guestStay <- createInternalGuestStay guestStayData
+        _ <- lift $ storage.saveGuestStay guestStay
+
+        lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+      Nothing ->
+        lift $ found' (header "Location" "/admin/guest-stays/new?error=invalid_data") "/admin/guest-stays/new?error=invalid_data"
+
+editGuestStayFormHandler :: String -> RouteHandler
+editGuestStayFormHandler guestStayId = requireAuth \user -> do
+  if not user.isAdmin then
+    forbidden
+  else do
+    liftEffect $ log $ "Serving edit form for guest stay: " <> guestStayId
+    -- For now, redirect to list since we need to implement fetching by ID
+    lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+
+updateGuestStayHandler :: String -> RouteHandler
+updateGuestStayHandler guestStayId = requireAuth \user -> do
+  if not user.isAdmin then
+    forbidden
+  else do
+    liftEffect $ log $ "Updating guest stay: " <> guestStayId
+    -- For now, redirect to list since we need to implement update logic
+    lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+
+deleteGuestStayHandler :: String -> RouteHandler
+deleteGuestStayHandler guestStayId = requireAuth \user -> do
+  if not user.isAdmin then
+    forbidden
+  else do
+    storage <- getStorage
+    liftEffect $ log $ "Deleting guest stay: " <> guestStayId
+
+    _ <- lift $ storage.deleteGuestStay guestStayId
+    lift $ found' (header "Location" "/admin/guest-stays") "/admin/guest-stays"
+
 routes :: AirbnbeastConfig -> Routes
 -- Login routes (migrated to ReaderT)
 routes config request = runRoute config request $
@@ -344,6 +469,9 @@ routes config request = runRoute config request $
       logoutHandler
 
     { method: Get, path: [] } ->
+      indexHandler
+
+    { method: Get, path: [ "schedule" ] } ->
       homeHandler
 
     { method: Get, path: [ "apartment", apartmentName ] } ->
@@ -360,6 +488,24 @@ routes config request = runRoute config request $
 
     { method: Delete, path: [ "apartments", apartmentName, "time-blocks", dateStr, timeOfDayStr ] } ->
       removeTimeBlockHandler { apartmentName, dateStr, timeOfDayStr }
+
+    { method: Get, path: [ "admin", "guest-stays" ] } ->
+      guestStaysListHandler
+
+    { method: Get, path: [ "admin", "guest-stays", "new" ] } ->
+      newGuestStayFormHandler
+
+    { method: Post, path: [ "admin", "guest-stays" ] } ->
+      createGuestStayHandler
+
+    { method: Get, path: [ "admin", "guest-stays", guestStayId, "edit" ] } ->
+      editGuestStayFormHandler guestStayId
+
+    { method: Put, path: [ "admin", "guest-stays", guestStayId ] } ->
+      updateGuestStayHandler guestStayId
+
+    { method: Delete, path: [ "admin", "guest-stays", guestStayId ] } ->
+      deleteGuestStayHandler guestStayId
 
     _ -> do
       liftEffect $ log "404 - Page not found"

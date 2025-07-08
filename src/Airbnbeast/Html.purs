@@ -2,7 +2,7 @@ module Airbnbeast.Html where
 
 import Prelude hiding (div)
 
-import Airbnbeast.Availability (Apartment(..))
+import Airbnbeast.Availability (Apartment(..), GuestStay, ReservationSource(..))
 import Airbnbeast.Cleaning (CleaningWindow(..), TimeOfDay(..), TimeBlock(..))
 import Airbnbeast.I18n as I18n
 import Data.Array as Array
@@ -357,8 +357,8 @@ apartmentPage isAdmin apartment@(Apartment name) windows =
             )
         )
 
-indexPage :: HtmlString
-indexPage =
+indexPage :: Boolean -> HtmlString
+indexPage isAdmin =
   html $
     head "Airbnbeast - Home" <>
       body
@@ -370,6 +370,7 @@ indexPage =
                         ( tag "li" [] (tag "a" [ attr "href" "/schedule", attr "class" "block p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 text-blue-700 hover:text-blue-800 font-medium transition-colors" ] "📋 Full Cleaning Schedule")
                             <> tag "li" [] (tag "a" [ attr "href" "/apartment/gloria", attr "class" "block p-4 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 text-green-700 hover:text-green-800 font-medium transition-colors" ] "🏠 Glória Apartment")
                             <> tag "li" [] (tag "a" [ attr "href" "/apartment/santa", attr "class" "block p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 text-purple-700 hover:text-purple-800 font-medium transition-colors" ] "🏠 Santa Apartment")
+                            <> (if isAdmin then tag "li" [] (tag "a" [ attr "href" "/admin/guest-stays", attr "class" "block p-4 bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-200 text-orange-700 hover:text-orange-800 font-medium transition-colors" ] "⚙️ Manage Guest Stays (Admin)") else "")
                         )
                   )
             )
@@ -412,5 +413,123 @@ loginPage errorMsg =
                             )
                     )
                 )
+            )
+        )
+
+guestStaysListPage :: Boolean -> Array GuestStay -> HtmlString
+guestStaysListPage isAdmin guestStays =
+  html $
+    head "Admin - Guest Stays Management" <>
+      body
+        ( div [ attr "class" "max-w-6xl mx-auto p-6" ]
+            ( h1 [ attr "class" "text-4xl font-bold text-center text-gray-800 mb-8" ] "Guest Stays Management"
+                <> div [ attr "class" "mb-6 flex justify-between items-center" ]
+                  ( tag "a" [ attr "href" "/", attr "class" "text-blue-600 hover:text-blue-800" ] "← Back to Schedule" <>
+                      tag "a" [ attr "href" "/admin/guest-stays/new", attr "class" "bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium" ] "+ Add New Guest Stay"
+                  )
+                <>
+                  div [ attr "class" "bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" ]
+                    ( if Array.null guestStays then
+                        div [ attr "class" "p-8 text-center text-gray-500" ] "No Internal Guest Stays found. Add your first one!"
+                      else
+                        table [ attr "class" "w-full" ]
+                          ( tag "thead" [ attr "class" "bg-gray-50" ]
+                              ( tr []
+                                  ( th [ attr "class" "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" ] "Apartment"
+                                      <> th [ attr "class" "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" ] "Dates"
+                                      <> th [ attr "class" "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" ] "Code"
+                                      <> th [ attr "class" "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" ] "Link"
+                                      <>
+                                        th [ attr "class" "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" ] "Actions"
+                                  )
+                              ) <>
+                              tag "tbody" [ attr "class" "divide-y divide-gray-200" ]
+                                (Array.foldMap renderGuestStayRow guestStays)
+                          )
+                    )
+            )
+        )
+  where
+  renderGuestStayRow :: GuestStay -> HtmlString
+  renderGuestStayRow { id, apartment, fromDate, toDate, last4Digits, link } =
+    let
+      apartmentName = case apartment of
+        Apartment name -> name
+      fromDateStr = show (fromEnum $ Date.year fromDate) <> "-"
+        <> (if fromEnum (Date.month fromDate) < 10 then "0" else "")
+        <> show (fromEnum $ Date.month fromDate)
+        <> "-"
+        <> (if fromEnum (Date.day fromDate) < 10 then "0" else "")
+        <> show (fromEnum $ Date.day fromDate)
+      toDateStr = show (fromEnum $ Date.year toDate) <> "-"
+        <> (if fromEnum (Date.month toDate) < 10 then "0" else "")
+        <> show (fromEnum $ Date.month toDate)
+        <> "-"
+        <> (if fromEnum (Date.day toDate) < 10 then "0" else "")
+        <> show (fromEnum $ Date.day toDate)
+    in
+      tr [ attr "class" "hover:bg-gray-50" ]
+        ( td [ attr "class" "px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" ] apartmentName
+            <> td [ attr "class" "px-6 py-4 whitespace-nowrap text-sm text-gray-900" ] (fromDateStr <> " → " <> toDateStr)
+            <> td [ attr "class" "px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono" ] last4Digits
+            <> td [ attr "class" "px-6 py-4 whitespace-nowrap text-sm text-blue-600" ]
+              (tag "a" [ attr "href" link, attr "target" "_blank", attr "class" "hover:underline" ] "View Link")
+            <>
+              td [ attr "class" "px-6 py-4 whitespace-nowrap text-sm text-gray-500" ]
+                ( tag "a" [ attr "href" ("/admin/guest-stays/" <> id <> "/edit"), attr "class" "text-blue-600 hover:text-blue-800 mr-3" ] "Edit" <>
+                    tag "button"
+                      [ attr "class" "text-red-600 hover:text-red-800"
+                      , attr "onclick" ("if(confirm('Delete this guest stay?')) { fetch('/admin/guest-stays/" <> id <> "', {method: 'DELETE'}); location.reload(); }")
+                      ]
+                      "Delete"
+                )
+        )
+
+newGuestStayFormPage :: HtmlString
+newGuestStayFormPage =
+  html $
+    head "Admin - Add New Guest Stay" <>
+      body
+        ( div [ attr "class" "max-w-2xl mx-auto p-6" ]
+            ( h1 [ attr "class" "text-3xl font-bold text-center text-gray-800 mb-8" ] "Add New Guest Stay"
+                <> div [ attr "class" "mb-6" ]
+                  (tag "a" [ attr "href" "/admin/guest-stays", attr "class" "text-blue-600 hover:text-blue-800" ] "← Back to Guest Stays")
+                <>
+                  div [ attr "class" "bg-white rounded-lg shadow-sm border border-gray-200 p-6" ]
+                    ( tag "form" [ attr "method" "POST", attr "action" "/admin/guest-stays" ]
+                        ( div [ attr "class" "space-y-4" ]
+                            ( div []
+                                ( tag "label" [ attr "for" "apartment", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Apartment" <>
+                                    tag "select" [ attr "id" "apartment", attr "name" "apartment", attr "required" "true", attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" ]
+                                      ( tag "option" [ attr "value" "" ] "Select an apartment"
+                                          <> tag "option" [ attr "value" "Glória" ] "Glória"
+                                          <>
+                                            tag "option" [ attr "value" "Santa" ] "Santa"
+                                      )
+                                )
+                                <> div []
+                                  ( tag "label" [ attr "for" "fromDate", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Check-in Date" <>
+                                      tag "input" [ attr "type" "date", attr "id" "fromDate", attr "name" "fromDate", attr "required" "true", attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" ] ""
+                                  )
+                                <> div []
+                                  ( tag "label" [ attr "for" "toDate", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Check-out Date" <>
+                                      tag "input" [ attr "type" "date", attr "id" "toDate", attr "name" "toDate", attr "required" "true", attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" ] ""
+                                  )
+                                <> div []
+                                  ( tag "label" [ attr "for" "last4Digits", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Last 4 Digits" <>
+                                      tag "input" [ attr "type" "text", attr "id" "last4Digits", attr "name" "last4Digits", attr "maxlength" "4", attr "pattern" "[0-9]{4}", attr "required" "true", attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500", attr "placeholder" "1234" ] ""
+                                  )
+                                <> div []
+                                  ( tag "label" [ attr "for" "link", attr "class" "block text-sm font-medium text-gray-700 mb-1" ] "Booking Reference/Link" <>
+                                      tag "input" [ attr "type" "url", attr "id" "link", attr "name" "link", attr "required" "true", attr "class" "block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500", attr "placeholder" "https://..." ] ""
+                                  )
+                                <>
+                                  div [ attr "class" "pt-4" ]
+                                    ( tag "button" [ attr "type" "submit", attr "class" "w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors" ] "Add Guest Stay" <>
+                                        tag "a" [ attr "href" "/admin/guest-stays", attr "class" "block w-full text-center bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-lg mt-2 transition-colors" ] "Cancel"
+                                    )
+                            )
+                        )
+                    )
             )
         )
