@@ -2,39 +2,81 @@ module Airbnbeast.WebServer where
 
 import Prelude
 
+import Airbnbeast.Auth (AuthError(..), Session, User)
 import Airbnbeast.Availability (Apartment(..), fetchGuestStays)
+import Airbnbeast.Cleaning (TimeOfDay(..), TimeBlock(..))
 import Airbnbeast.Cleaning as Cleaning
 import Airbnbeast.Html as Html
 import Airbnbeast.I18n as I18n
-import Airbnbeast.Storage (Storage)
-import Airbnbeast.Auth (AuthError(..), Session)
 import Airbnbeast.Session (defaultSessionConfig, createSession, validateSession, createSessionCookie, parseSessionFromCookie)
+import Airbnbeast.Storage (Storage)
+import Control.Monad.Reader (ReaderT, runReaderT, asks)
+import Data.Array as Array
+import Data.Array.NonEmpty as NEArray
+import Data.Date (Date)
+import Data.Date as Date
 import Data.Either (Either(..))
+import Data.Enum (toEnum)
+import Data.Int as Int
 import Data.Map as Map
-import Foreign.Object as Object
 import Data.Maybe (Maybe(..))
+import Data.String as String
+import Data.Traversable (traverse)
 import Effect.Aff (Aff, attempt)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Now (nowDate)
-import HTTPure (Request, ResponseM, ServerM, header, notFound, ok', serve, found')
+import Foreign.Object as Object
+import HTTPure (Request, ResponseM, ServerM, Response, header, notFound, ok', serve, found')
 import HTTPure.Body (toString)
 import HTTPure.Method (Method(..))
-import Data.String as String
-import Data.Array as Array
-import Data.Array.NonEmpty as NEArray
-import Data.Int as Int
-import Data.Date (Date)
-import Data.Date as Date
-import Data.Traversable (traverse)
-import Data.Enum (toEnum)
-import Airbnbeast.Cleaning (TimeOfDay(..), TimeBlock(..))
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 
 type Routes = Request -> ResponseM
 
--- Secure session management with HMAC signatures  
+-- | Application context containing current user and storage
+type Context =
+  { currentUser :: Maybe User
+  , storage :: Storage
+  }
+
+-- | Application monad that provides access to context
+type AppM = ReaderT Context Aff
+
+-- | New context-aware route handler type
+type RouteHandler = Request -> AppM Response
+
+-- | Convert an AppM computation to a ResponseM for HTTPure compatibility
+runRoute :: Storage -> Request -> AppM Response -> ResponseM
+runRoute storage request appAction = do
+  let
+    currentUser = getSessionFromRequest request >>= \session -> Just session.user
+    context = { currentUser, storage }
+  runReaderT appAction context
+
+-- | Helper to get the current user from context
+getCurrentUser :: AppM (Maybe User)
+getCurrentUser = asks _.currentUser
+
+-- | Helper to get storage from context
+getStorage :: AppM Storage
+getStorage = asks _.storage
+
+-- | Helper to create a redirect response to login
+redirectToLogin :: AppM Response
+redirectToLogin = liftAff $ found' (header "Location" "/login") "/login"
+
+-- | Helper that runs an action if authenticated, otherwise redirects to login
+requireAuthR :: (User -> AppM Response) -> AppM Response
+requireAuthR action = do
+  maybeUser <- getCurrentUser
+  case maybeUser of
+    Just user -> action user
+    Nothing -> redirectToLogin
+
+-- Secure session management with HMAC signatures
 getSessionFromRequest :: Request -> Maybe Session
 getSessionFromRequest request = do
   let headersStr = show request.headers
@@ -141,17 +183,29 @@ createTimeBlock apartment date timeOfDay available =
     , apartment: apartment
     }
 
-routes :: Storage -> Routes
--- Login routes
-routes _ { method: Get, path: [ "login" ], query } = do
-  liftEffect $ log "Serving login page"
+-- | ReaderT-based home handler
+homeHandler :: RouteHandler
+homeHandler _ = requireAuthR \user -> do
+  liftEffect $ log $ "🏠 Serving full cleaning schedule for user: " <> show user.username
+  storage <- getStorage
+  schedule <- liftAff $ fetchCleaningSchedule storage
+  liftAff $ ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage schedule)
+
+-- | ReaderT-based login handler
+loginHandler :: Object.Object String -> RouteHandler
+loginHandler query _ = do
+  liftEffect $ log "📝 Serving login page"
   let
     errorMsg = case Object.lookup "error" query of
       Just "invalid_credentials" -> Just I18n.pt.invalidCredentials
       Just "server_error" -> Just I18n.pt.serverError
       Just "invalid_data" -> Just I18n.pt.invalidLoginData
       _ -> Nothing
-  ok' (header "Content-Type" "text/html") (Html.loginPage errorMsg)
+  liftAff $ ok' (header "Content-Type" "text/html") (Html.loginPage errorMsg)
+
+routes :: Storage -> Routes
+-- Login routes (migrated to ReaderT)
+routes storage request@{ method: Get, path: [ "login" ], query } = runRoute storage request (loginHandler query request)
 
 routes storage { method: Post, path: [ "auth", "login" ], body } = do
   liftEffect $ log "Processing login"
@@ -185,11 +239,8 @@ routes _ { method: Post, path: [ "auth", "logout" ] } = do
     (header "Set-Cookie" "_airbnbeast_session=; Path=/; HttpOnly; Expires=Thu, 01 Jan 1970 00:00:00 GMT" <> header "Location" "/login")
     "/login"
 
--- Protected routes
-routes storage request@{ method: Get, path: [] } = requireAuth request do
-  liftEffect $ log "Serving full cleaning schedule"
-  schedule <- fetchCleaningSchedule storage
-  ok' (header "Content-Type" "text/html") (Html.cleaningSchedulePage schedule)
+-- Protected routes (migrated to ReaderT)
+routes storage request@{ method: Get, path: [] } = runRoute storage request (homeHandler request)
 
 routes storage request@{ method: Get, path: [ "apartment", apartmentName ] } = requireAuth request do
   liftEffect $ log $ "Serving apartment page for: " <> apartmentName
