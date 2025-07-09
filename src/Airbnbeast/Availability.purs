@@ -1,4 +1,11 @@
-module Airbnbeast.Availability (GuestStay, Apartment(..), ReservationSource(..), fetchAvailability, fetchDayToDay, fetchGuestStays) where
+module Airbnbeast.Availability
+  ( GuestStay
+  , Apartment(..)
+  , ReservationSource(..)
+  , fetchAvailability
+  , fetchDayToDay
+  , fetchGuestStays
+  ) where
 
 import Prelude
 
