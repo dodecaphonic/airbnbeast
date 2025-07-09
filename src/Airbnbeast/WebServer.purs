@@ -282,9 +282,14 @@ loginAttemptHandler = do
           sessionToken <- lift $ createSession defaultSessionConfig user
           liftEffect $ log $ "🔑 Created session token: " <> String.take 20 sessionToken <> "..."
           liftEffect $ log $ "🍪 Setting cookie: " <> createSessionCookie sessionToken
+
+          -- Redirect based on user role
+          let redirectUrl = if user.isAdmin then "/" else "/schedule"
+          liftEffect $ log $ "Redirecting " <> (if user.isAdmin then "admin" else "non-admin") <> " user to: " <> redirectUrl
+
           found'
-            (header "Set-Cookie" (createSessionCookie sessionToken) <> header "Location" "/")
-            "/"
+            (header "Set-Cookie" (createSessionCookie sessionToken) <> header "Location" redirectUrl)
+            redirectUrl
         Left InvalidCredentials ->
           found' (header "Location" "/login?error=invalid_credentials") "/login?error=invalid_credentials"
         Left e -> do
