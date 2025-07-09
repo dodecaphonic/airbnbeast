@@ -16,15 +16,12 @@ import Data.Array as Array
 import Data.Array.NonEmpty as NEArray
 import Data.Date (Date)
 import Data.Date as Date
-import Data.DateTime as DateTime
 import Data.Either (Either(..))
-import Data.Enum (toEnum, fromEnum)
+import Data.Enum (toEnum)
 import Data.Int as Int
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
-import Data.Maybe (fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as String
-import Data.Time (Time)
 import Data.Traversable (traverse)
 import Data.Tuple.Nested ((/\))
 import Data.UUID as UUID
