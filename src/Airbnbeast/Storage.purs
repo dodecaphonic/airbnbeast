@@ -38,6 +38,8 @@ type Storage =
   , deleteGuestStay :: String -> Aff Boolean
   , fetchStoredGuestStays :: Apartment -> Aff (Array GuestStay)
   , fetchGuestStayById :: String -> Aff (Maybe GuestStay)
+  , markGuestStayAsDone :: String -> Aff Boolean
+  , fetchDoneGuestStays :: Aff (Array String)
   }
 
 newtype RawTimeBlock = RawTimeBlock
@@ -104,6 +106,8 @@ sqliteStorage conn =
   , deleteGuestStay: sqliteDeleteGuestStay conn
   , fetchStoredGuestStays: sqliteFetchStoredGuestStays conn
   , fetchGuestStayById: sqliteFetchGuestStayById conn
+  , markGuestStayAsDone: sqliteMarkGuestStayAsDone conn
+  , fetchDoneGuestStays: sqliteFetchDoneGuestStays conn
   }
 
 sqliteDisableTimeBlock :: SQLite3.DBConnection -> TimeBlock -> Aff TimeBlock
@@ -223,6 +227,7 @@ sqliteDisabledTimeBlocksDuringStay conn (CleaningWindow { from, to, stay }) = do
   parseTimeOfDay "Morning" = pure Morning
   parseTimeOfDay "Afternoon" = pure Afternoon
   parseTimeOfDay other = throwError (error $ "Invalid time of day: " <> other)
+
 
 sqliteAuthenticateUser :: SQLite3.DBConnection -> String -> String -> Aff (Either AuthError User)
 sqliteAuthenticateUser conn username password = do
@@ -378,6 +383,12 @@ sqliteFetchStoredGuestStays conn apartment = do
 
       _ -> throwError (error $ "Invalid date format: " <> dateStr)
 
+  parseTimeOfDay :: String -> Aff TimeOfDay
+  parseTimeOfDay "Morning" = pure Morning
+  parseTimeOfDay "Afternoon" = pure Afternoon
+  parseTimeOfDay other = throwError (error $ "Invalid time of day: " <> other)
+
+
 sqliteFetchGuestStayById :: SQLite3.DBConnection -> String -> Aff (Maybe GuestStay)
 sqliteFetchGuestStayById conn guestStayId = do
   liftEffect $ Console.log $ "Fetching guest stay by ID: " <> guestStayId
@@ -433,3 +444,43 @@ sqliteFetchGuestStayById conn guestStayId = do
           pure (pure $ Date.canonicalDate year month day)
 
       _ -> throwError (error $ "Invalid date format: " <> dateStr)
+
+  parseTimeOfDay :: String -> Aff TimeOfDay
+  parseTimeOfDay "Morning" = pure Morning
+  parseTimeOfDay "Afternoon" = pure Afternoon
+  parseTimeOfDay other = throwError (error $ "Invalid time of day: " <> other)
+
+sqliteMarkGuestStayAsDone :: SQLite3.DBConnection -> String -> Aff Boolean
+sqliteMarkGuestStayAsDone conn guestStayId = do
+  liftEffect $ Console.log $ "Marking guest stay as done: " <> guestStayId
+
+  let
+    sql =
+      """
+      INSERT OR IGNORE INTO done_guest_stays (guest_stay_id)
+      VALUES (?)
+      """
+
+  _ <- SQLite3.queryDB conn sql [ unsafeToForeign guestStayId ]
+  pure true
+
+sqliteFetchDoneGuestStays :: SQLite3.DBConnection -> Aff (Array String)
+sqliteFetchDoneGuestStays conn = do
+  liftEffect $ Console.log "Fetching done guest stays"
+
+  let
+    sql =
+      """
+      SELECT guest_stay_id
+      FROM done_guest_stays
+      ORDER BY marked_done_at DESC
+      """
+
+  results <- (decodeJson <<< unsafeFromForeign) <$> SQLite3.queryDB conn sql []
+
+  case results of
+    Right (doneGuestStays :: Array { guest_stay_id :: String }) ->
+      pure $ map _.guest_stay_id doneGuestStays
+
+    Left e ->
+      throwError (error $ "Failed to fetch done guest stays: " <> show e)

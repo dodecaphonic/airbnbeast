@@ -1,0 +1,1 @@
+DROP TABLE done_guest_stays;

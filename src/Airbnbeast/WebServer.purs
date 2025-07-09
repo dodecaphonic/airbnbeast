@@ -601,9 +601,19 @@ fetchCleaningSchedule storage = do
   -- Generate cleaning schedule from mixed guest stays
   let baseSchedule = Cleaning.scheduleFromGuestStaysWithDate currentDate mixedGuestStays
 
+  -- Fetch done guest stays to exclude from schedule
+  doneGuestStayIds <- storage.fetchDoneGuestStays
+
+  -- Filter out cleaning windows for done guest stays
+  let filteredSchedule = map (Array.filter (not <<< isCleaningWindowDone doneGuestStayIds)) baseSchedule
+
   -- Update each CleaningWindow with disabled TimeBlocks from storage
-  traverse (traverse (updateCleaningWindow storage)) baseSchedule
+  traverse (traverse (updateCleaningWindow storage)) filteredSchedule
   where
+
+  isCleaningWindowDone :: Array String -> Cleaning.CleaningWindow -> Boolean
+  isCleaningWindowDone doneIds (Cleaning.CleaningWindow { stay }) =
+    Array.any (_ == stay.id) doneIds
 
   updateCleaningWindow :: Storage -> Cleaning.CleaningWindow -> Aff Cleaning.CleaningWindow
   updateCleaningWindow st window = do
