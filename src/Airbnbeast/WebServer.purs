@@ -34,9 +34,9 @@ import Foreign.Object as Object
 import HTTPure (Request, ResponseM, ServerM, Response, found', header, notFound, ok', serve, response)
 import HTTPure.Body (toString)
 import HTTPure.Method (Method(..))
+import JSURI (decodeURIComponent)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
-import JSURI (decodeURIComponent)
 import Partial.Unsafe (unsafePartial)
 
 type Routes = Request -> ResponseM
@@ -46,6 +46,7 @@ type Context =
   { currentUser :: Maybe User
   , request :: Request
   , storage :: Storage
+  , sessionConfig :: SessionConfig
   }
 
 -- | Application monad that provides access to context
@@ -59,7 +60,7 @@ runRoute :: AirbnbeastConfig -> Request -> AppM Response -> ResponseM
 runRoute { sessionConfig, storage } request appAction = do
   let
     currentUser = getSessionFromRequest sessionConfig request >>= \session -> Just session.user
-    context = { currentUser, request, storage }
+    context = { currentUser, request, storage, sessionConfig }
   runReaderT appAction context
 
 -- | Helper to get the current user from context
@@ -266,6 +267,7 @@ loginAttemptHandler :: RouteHandler
 loginAttemptHandler = do
   { body } <- asks _.request
   storage <- getStorage
+  sessionConfig <- asks _.sessionConfig
 
   liftEffect $ log "Processing login"
   bodyText <- liftAff $ toString body
@@ -276,7 +278,7 @@ loginAttemptHandler = do
         Right user -> do
           liftEffect $ log $ "User authenticated: " <> show user.username
           -- Create secure session token
-          sessionToken <- lift $ createSession defaultSessionConfig user
+          sessionToken <- lift $ createSession sessionConfig user
           liftEffect $ log $ "🔑 Created session token: " <> String.take 20 sessionToken <> "..."
           liftEffect $ log $ "🍪 Setting cookie: " <> createSessionCookie sessionToken
 
