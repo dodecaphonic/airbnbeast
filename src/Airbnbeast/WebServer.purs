@@ -9,7 +9,7 @@ import Airbnbeast.Cleaning as Cleaning
 import Airbnbeast.Config (AirbnbeastConfig)
 import Airbnbeast.Html as Html
 import Airbnbeast.I18n as I18n
-import Airbnbeast.Session (SessionConfig, createSession, createSessionCookie, defaultSessionConfig, parseSessionFromCookie, validateSession)
+import Airbnbeast.Session (SessionConfig, createSession, createSessionCookie, parseSessionFromCookie, validateSession)
 import Airbnbeast.Storage (Storage)
 import Control.Monad.Reader (ReaderT, asks, lift, runReaderT)
 import Data.Array as Array
@@ -502,6 +502,26 @@ deleteGuestStayHandler guestStayId = requireAuth \user -> do
         liftEffect $ log $ "Failed to delete guest stay: " <> show error
         lift $ found' (header "Location" "/admin/guest-stays?error=delete_failed" <> header "Turbo-Method" "get") "/admin/guest-stays?error=delete_failed"
 
+markCleaningDoneHandler :: String -> RouteHandler
+markCleaningDoneHandler guestStayId = requireAuth \user -> do
+  if not user.isAdmin then
+    forbidden
+  else do
+    storage <- getStorage
+    liftEffect $ log $ "Marking cleaning as done for guest stay: " <> guestStayId
+
+    result <- lift $ attempt $ storage.markGuestStayAsDone guestStayId
+    case result of
+      Right _ -> do
+        let frameId = "cleaning-window-" <> guestStayId
+
+        liftAff $ ok'
+          (header "Content-Type" "text/vnd.turbo-stream.html")
+          ("<turbo-stream action=\"remove\" target=\"" <> frameId <> "\"></turbo-stream>")
+      Left error -> do
+        liftEffect $ log $ "Failed to mark cleaning as done: " <> show error
+        liftAff $ response 500 "Internal Server Error"
+
 routes :: AirbnbeastConfig -> Routes
 -- Login routes (migrated to ReaderT)
 routes config request = runRoute config request $
@@ -556,6 +576,9 @@ routes config request = runRoute config request $
 
     { method: Delete, path: [ "admin", "guest-stays", guestStayId ] } ->
       deleteGuestStayHandler guestStayId
+
+    { method: Post, path: [ "admin", "cleaning-windows", guestStayId, "mark-done" ] } ->
+      markCleaningDoneHandler guestStayId
 
     _ -> do
       liftEffect $ log "404 - Page not found"

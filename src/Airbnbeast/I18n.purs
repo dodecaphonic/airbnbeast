@@ -39,6 +39,7 @@ type Translations =
   , serverError :: String
   , invalidLoginData :: String
   , noTimeBlocksAvailable :: String
+  , markCleaningDoneConfirm :: String
   }
 
 pt :: Translations
@@ -81,6 +82,7 @@ pt =
   , serverError: "Erro interno do servidor"
   , invalidLoginData: "Dados de login inválidos"
   , noTimeBlocksAvailable: "Nenhum período disponível"
+  , markCleaningDoneConfirm: "Tem certeza de que quer marcar esta limpeza como feita?"
   }
 
 formatDatePt :: DateTime -> String

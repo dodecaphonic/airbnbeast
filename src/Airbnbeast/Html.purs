@@ -241,11 +241,11 @@ cleaningWindowCard :: { isFirst :: Boolean, isOpen :: Boolean, isAdmin :: Boolea
 cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, to, stay, timeBlocks }) =
   let
     -- Generate unique frame ID based on apartment and stay details
-    frameId = "cleaning-window-" <> apartmentToUrl stay.apartment <> "-" <> stay.last4Digits
+    frameId = "cleaning-window-" <> stay.id
 
     cardClasses =
-      if isFirst then "bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
-      else "bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
+      if isFirst then "relative bg-blue-50 rounded-lg shadow-md border border-blue-200 p-4 hover:shadow-lg transition-shadow"
+      else "relative bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow"
 
     dateClasses =
       if isFirst then "text-sm text-blue-700 mb-2 text-center"
@@ -292,6 +292,8 @@ cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, t
       Nothing ->
         div [ attr "class" dateClasses ] (formatDate from <> " → " <> formatDate to)
 
+    markDoneUrl = "/admin/cleaning-windows/" <> stay.id <> "/mark-done"
+
     cardContent =
       div
         [ attr "class" cardClasses
@@ -300,7 +302,20 @@ cleaningWindowCard { isFirst, isOpen, isAdmin } window@(CleaningWindow { from, t
         , attr "data-cleaning-window-hide-text-value" I18n.pt.hidePeriods
         , attr "data-cleaning-window-time-blocks-visible-value" (show isOpen)
         ] $
-        dateRangeDisplay
+        ( if isAdmin then
+            div [ attr "class" "absolute top-4 right-4" ]
+              ( tag "a"
+                  [ attr "href" markDoneUrl
+                  , attr "class" "text-green-600 hover:text-green-800 text-xl"
+                  , attr "data-turbo-method" "post"
+                  , attr "data-turbo-confirm" I18n.pt.markCleaningDoneConfirm
+                  , attr "title" "Marcar limpeza como feita"
+                  ]
+                  "✅"
+              )
+          else ""
+        )
+          <> dateRangeDisplay
           <> div [ attr "class" codeClasses ] stay.last4Digits
           <> div [ attr "class" "text-center mb-3" ] (tag "a" [ attr "href" stay.link, attr "target" "_blank", attr "class" linkClasses ] I18n.pt.viewReservation)
           <>
